@@ -62,9 +62,10 @@ const Container = styled.div`
   background: ${({ theme }) => theme.bgtotal};
   transition: all 0.3s;
   &.active {
-    grid-template-columns: 300px auto;
+    grid-template-columns: 250px auto;
   }
   color: ${({ theme }) => theme.text};
 `;
+
 
 export default App;

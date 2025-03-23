@@ -7,6 +7,9 @@ import {
   AiOutlineApartment,
   AiOutlineSetting,
 } from "react-icons/ai";
+import { IoDocumentTextOutline } from "react-icons/io5";
+import { FaUser } from "react-icons/fa";
+import { MdGroups } from "react-icons/md";
 import { MdOutlineAnalytics, MdLogout } from "react-icons/md";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useContext } from "react";
@@ -39,7 +42,7 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }) {
         <div className="imgcontent">
           <img src={logo} />
         </div>
-        <h2>codigo369</h2>
+        <h2>Constancias ISC</h2>
       </div>
       {linksArray.map(({ icon, label, to }) => (
         <div className="LinkContainer" key={label}>
@@ -94,29 +97,19 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }) {
 //#region Data links
 const linksArray = [
   {
-    label: "Home",
-    icon: <AiOutlineHome />,
-    to: "/",
+    label: "Equipos",
+    icon: <MdGroups />,
+    to: "/equipos",
   },
   {
-    label: "Estadisticas",
-    icon: <MdOutlineAnalytics />,
-    to: "/estadisticas",
+    label: "Integrantes",
+    icon: <FaUser />,
+    to: "/integrantes",
   },
   {
-    label: "Productos",
-    icon: <AiOutlineApartment />,
-    to: "/productos",
-  },
-  {
-    label: "Diagramas",
-    icon: <MdOutlineAnalytics />,
-    to: "/diagramas",
-  },
-  {
-    label: "Reportes",
-    icon: <MdOutlineAnalytics />,
-    to: "/reportes",
+    label: "Constancias",
+    icon: <IoDocumentTextOutline />,
+    to: "/constancias",
   },
 ];
 const secondarylinksArray = [
