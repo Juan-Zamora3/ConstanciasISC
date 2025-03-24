@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -28,9 +28,6 @@ export function Constancias() {
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [nombreConcurso, setNombreConcurso] = useState('');
   const [plantilla, setPlantilla] = useState(null);
-  const [camposPDF, setCamposPDF] = useState([]);
-  const [campoNombre, setCampoNombre] = useState('');
-  const [campoEquipo, setCampoEquipo] = useState('');
   const fileInputRef = useRef(null);
 
   // Cargar equipos desde Firestore
@@ -48,7 +45,7 @@ export function Constancias() {
     fetchTeams();
   }, []);
 
-  // Analizar campos del PDF cuando se sube la plantilla
+  // Manejar la subida del PDF
   const handlePlantillaUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -62,18 +59,11 @@ export function Constancias() {
         return;
       }
 
-      // Cargar PDF para extraer campos de formulario
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const form = pdfDoc.getForm();
-      const fields = form.getFields();
-      const fieldNames = fields.map(field => field.getName());
-      
       setPlantilla(arrayBuffer);
-      setCamposPDF(fieldNames);
-      alert('Plantilla subida exitosamente. Campos detectados: ' + fieldNames.join(', '));
+      alert('Plantilla cargada correctamente');
     } catch (error) {
       console.error('Error al procesar PDF:', error);
-      alert('Error al procesar el PDF: ' + error.message);
+      alert('Error al cargar el PDF: ' + error.message);
     }
   };
 
@@ -95,7 +85,7 @@ export function Constancias() {
       const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
 
-      // Intentar cargar la fuente personalizada o usar Helvetica como fallback
+      // Intentar cargar fuente personalizada o usar Helvetica
       let customFont;
       try {
         const fontResponse = await fetch('/fonts/Patria.ttf');
@@ -105,28 +95,28 @@ export function Constancias() {
         customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
 
-      // Rellenar campos del formulario si existen
+      // Manejar campos de formulario automáticamente
       const form = pdfDoc.getForm();
       const fields = form.getFields();
 
-      // Buscar y llenar campos por nombre
+      // Intenta encontrar campos que coincidan con "nombre" o "equipo"
       fields.forEach(field => {
         const fieldName = field.getName().toLowerCase();
         
-        if (fieldName.includes('nombre') && campoNombre) {
+        if (fieldName.includes('nombre')) {
           field.setText(nombreIntegrante);
-        } else if (fieldName.includes('equipo') && campoEquipo) {
+        } else if (fieldName.includes('equipo')) {
           field.setText(nombreEquipo);
         }
       });
 
-      // Si no hay campos de formulario, usar el método de dibujar texto
+      // Si no hay campos de formulario, dibujar texto en posiciones predeterminadas
       if (fields.length === 0) {
         const pages = pdfDoc.getPages();
         const firstPage = pages[0];
         const { width, height } = firstPage.getSize();
 
-        // Dibujar nombre
+        // Dibujar nombre (tamaño 40, centrado, fuente Patria)
         const nombreTextWidth = customFont.widthOfTextAtSize(nombreIntegrante, 40);
         firstPage.drawText(nombreIntegrante, {
           x: (width - nombreTextWidth) / 2,
@@ -136,20 +126,18 @@ export function Constancias() {
           color: rgb(0, 0, 0),
         });
 
-        // Dibujar equipo
-        const equipoTextWidth = customFont.widthOfTextAtSize(nombreEquipo, 24);
+        // Dibujar equipo (tamaño 20, centrado, fuente Patria)
+        const equipoTextWidth = customFont.widthOfTextAtSize(nombreEquipo, 20);
         firstPage.drawText(nombreEquipo, {
           x: (width - equipoTextWidth) / 2,
           y: height / 2 - 50,
-          size: 24,
+          size: 20,
           font: customFont,
           color: rgb(0, 0, 0),
         });
       }
 
-      // Aplanar el formulario para que no sea editable
       form.flatten();
-
       const pdfBytes = await pdfDoc.save();
       return new Blob([pdfBytes], { type: 'application/pdf' });
     } catch (error) {
@@ -160,7 +148,7 @@ export function Constancias() {
 
   const handleGenerar = async () => {
     if (!selectedTeams.length || !plantilla || !nombreConcurso) {
-      alert("Faltan datos requeridos");
+      alert("Por favor complete todos los campos requeridos");
       return;
     }
 
@@ -194,7 +182,7 @@ export function Constancias() {
 
     } catch (error) {
       console.error('Error generando constancias:', error);
-      alert(`Error: ${error.message}`);
+      alert(`Error al generar constancias: ${error.message}`);
     }
   };
 
@@ -206,12 +194,12 @@ export function Constancias() {
     <Container>
       <Header>
         <h1>Generador de Constancias</h1>
-        <p>Sube un PDF con campos de formulario para generar constancias personalizadas</p>
+        <p>Sube un PDF con campos editables para generar constancias automáticamente</p>
       </Header>
 
       <FormContainer>
         <FormGroup>
-          <label>Plantilla PDF (con campos de formulario)</label>
+          <label>Plantilla PDF (con campos editables)</label>
           <HiddenFileInput
             type="file"
             accept="application/pdf"
@@ -219,38 +207,8 @@ export function Constancias() {
             onChange={handlePlantillaUpload}
           />
           <UploadButton onClick={() => fileInputRef.current.click()}>
-            Seleccionar Plantilla
+            {plantilla ? 'Plantilla Cargada ✔' : 'Seleccionar Plantilla'}
           </UploadButton>
-          {camposPDF.length > 0 && (
-            <FieldsInfo>
-              <p>Campos detectados en el PDF:</p>
-              <ul>
-                {camposPDF.map((campo, index) => (
-                  <li key={index}>{campo}</li>
-                ))}
-              </ul>
-              <FieldMapping>
-                <div>
-                  <label>Campo para Nombre:</label>
-                  <select value={campoNombre} onChange={(e) => setCampoNombre(e.target.value)}>
-                    <option value="">Seleccionar...</option>
-                    {camposPDF.map((campo, index) => (
-                      <option key={`nombre-${index}`} value={campo}>{campo}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>Campo para Equipo:</label>
-                  <select value={campoEquipo} onChange={(e) => setCampoEquipo(e.target.value)}>
-                    <option value="">Seleccionar...</option>
-                    {camposPDF.map((campo, index) => (
-                      <option key={`equipo-${index}`} value={campo}>{campo}</option>
-                    ))}
-                  </select>
-                </div>
-              </FieldMapping>
-            </FieldsInfo>
-          )}
         </FormGroup>
 
         <FormGroup>
@@ -312,7 +270,7 @@ export function Constancias() {
   );
 }
 
-// Estilos mejorados
+// Estilos simplificados
 const Container = styled.div`
   padding: 2rem;
   max-width: 1200px;
@@ -362,7 +320,7 @@ const HiddenFileInput = styled.input`
 
 const UploadButton = styled.button`
   padding: 0.8rem 1.2rem;
-  background: #3498db;
+  background: ${props => props.children.includes('✔') ? '#27ae60' : '#3498db'};
   color: white;
   border: none;
   border-radius: 6px;
@@ -372,58 +330,7 @@ const UploadButton = styled.button`
   width: 100%;
 
   &:hover {
-    background: #2980b9;
-  }
-`;
-
-const FieldsInfo = styled.div`
-  margin-top: 1rem;
-  padding: 1rem;
-  background: #ecf0f1;
-  border-radius: 6px;
-  
-  p {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-  }
-  
-  ul {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1rem 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    
-    li {
-      background: #bdc3c7;
-      color: #2c3e50;
-      padding: 0.3rem 0.6rem;
-      border-radius: 4px;
-      font-size: 0.85rem;
-    }
-  }
-`;
-
-const FieldMapping = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-top: 1rem;
-  
-  div {
-    label {
-      display: block;
-      margin-bottom: 0.3rem;
-      font-size: 0.9rem;
-    }
-    
-    select {
-      width: 100%;
-      padding: 0.5rem;
-      border: 1px solid #bdc3c7;
-      border-radius: 4px;
-    }
+    background: ${props => props.children.includes('✔') ? '#219653' : '#2980b9'};
   }
 `;
 
