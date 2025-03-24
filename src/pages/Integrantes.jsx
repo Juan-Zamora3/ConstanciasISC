@@ -1,23 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Table, TableHeader, TableRow, TableCell, ActionButton } from '../components/MemberTable';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+
+// Configuración de Firebase (reemplaza con tus datos)
+const firebaseConfig = {
+  apiKey: "AIzaSyAaXYIqtfjms2cB1N0oTyuirrJYk6qsmaw",
+  authDomain: "constanciasisc.firebaseapp.com",
+  projectId: "constanciasisc",
+  storageBucket: "constanciasisc.appspot.com",
+  messagingSenderId: "716702079630",
+  appId: "1:716702079630:web:7eb7ab3fc11f67ef9c07df",
+  measurementId: "G-KH8FQF19M6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 export function Integrantes() {
+  const [integrantes, setIntegrantes] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
+  const [memberForm, setMemberForm] = useState({
+    nombre: '',
+    apellidos: '',
+    semestre: '',
+    carrera: '',
+    numeroControl: '',
+    correo: ''
+  });
 
-  // Datos de ejemplo
-  const mockMembers = [
-    { id: 1, nombre: "Ana Pérez", email: "ana@example.com", equipo: "Equipo Alpha" },
-    { id: 2, nombre: "Carlos Ruiz", email: "carlos@example.com", equipo: "Equipo Beta" },
-  ];
-
-  // Equipos ficticios para el dropdown
-  const mockTeams = ["Equipo Alpha", "Equipo Beta", "Equipo Gamma"];
+  // Cargar integrantes desde la colección "integrantes"
+  useEffect(() => {
+    async function fetchIntegrantes() {
+      try {
+        const integrantesCol = collection(db, 'integrantes');
+        const snapshot = await getDocs(integrantesCol);
+        const integrantesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setIntegrantes(integrantesList);
+      } catch (error) {
+        console.error("Error al cargar integrantes:", error);
+      }
+    }
+    fetchIntegrantes();
+  }, []);
 
   const handleEdit = (member) => {
     setSelectedMember(member);
+    setMemberForm({
+      nombre: member.nombre,
+      apellidos: member.apellidos,
+      semestre: member.semestre,
+      carrera: member.carrera,
+      numeroControl: member.numeroControl,
+      correo: member.correo,
+    });
     setIsModalOpen(true);
   };
 
@@ -26,11 +65,68 @@ export function Integrantes() {
     setIsDeleteModalOpen(true);
   };
 
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setMemberForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    try {
+      if (selectedMember) {
+        // Actualizar integrante existente
+        const integranteDoc = doc(db, 'integrantes', selectedMember.id);
+        await updateDoc(integranteDoc, memberForm);
+        setIntegrantes(prev => prev.map(m => m.id === selectedMember.id ? { ...m, ...memberForm } : m));
+      } else {
+        // Agregar nuevo integrante
+        const docRef = await addDoc(collection(db, 'integrantes'), memberForm);
+        setIntegrantes(prev => [...prev, { id: docRef.id, ...memberForm }]);
+      }
+      setIsModalOpen(false);
+      setMemberForm({
+        nombre: '',
+        apellidos: '',
+        semestre: '',
+        carrera: '',
+        numeroControl: '',
+        correo: ''
+      });
+      setSelectedMember(null);
+    } catch (error) {
+      console.error("Error al guardar integrante:", error);
+      alert("Error al guardar el integrante");
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteDoc(doc(db, 'integrantes', selectedMember.id));
+      setIntegrantes(prev => prev.filter(m => m.id !== selectedMember.id));
+      setIsDeleteModalOpen(false);
+      setSelectedMember(null);
+    } catch (error) {
+      console.error("Error al eliminar integrante:", error);
+      alert("Error al eliminar el integrante");
+    }
+  };
+
   return (
     <Container>
       <Header>
         <h1>Gestión de Integrantes</h1>
-        <ActionButton onClick={() => setIsModalOpen(true)}>
+        <ActionButton onClick={() => { 
+          setSelectedMember(null); 
+          setMemberForm({
+            nombre: '',
+            apellidos: '',
+            semestre: '',
+            carrera: '',
+            numeroControl: '',
+            correo: ''
+          });
+          setIsModalOpen(true); 
+        }}>
           Agregar Integrante
         </ActionButton>
       </Header>
@@ -39,30 +135,34 @@ export function Integrantes() {
         <thead>
           <TableRow>
             <TableHeader>Nombre</TableHeader>
+            <TableHeader>Apellidos</TableHeader>
+            <TableHeader>Semestre</TableHeader>
+            <TableHeader>Carrera</TableHeader>
+            <TableHeader>Número de Control</TableHeader>
             <TableHeader>Correo</TableHeader>
-            <TableHeader>Equipo</TableHeader>
             <TableHeader>Acciones</TableHeader>
           </TableRow>
         </thead>
         <tbody>
-          {mockMembers.map((member) => (
+          {integrantes.map(member => (
             <TableRow key={member.id}>
               <TableCell>{member.nombre}</TableCell>
-              <TableCell>{member.email}</TableCell>
-              <TableCell>{member.equipo}</TableCell>
+              <TableCell>{member.apellidos}</TableCell>
+              <TableCell>{member.semestre}</TableCell>
+              <TableCell>{member.carrera}</TableCell>
+              <TableCell>{member.numeroControl}</TableCell>
+              <TableCell>{member.correo}</TableCell>
               <TableCell>
                 <ActionButton variant="info">Ver</ActionButton>
                 <ActionButton onClick={() => handleEdit(member)}>Editar</ActionButton>
-                <ActionButton variant="danger" onClick={() => handleDelete(member)}>
-                  Eliminar
-                </ActionButton>
+                <ActionButton variant="danger" onClick={() => handleDelete(member)}>Eliminar</ActionButton>
               </TableCell>
             </TableRow>
           ))}
         </tbody>
       </Table>
 
-      {/* Modal para agregar/editar */}
+      {/* Modal para agregar/editar integrante */}
       {isModalOpen && (
         <ModalBackdrop>
           <Modal>
@@ -70,57 +170,93 @@ export function Integrantes() {
               <h2>{selectedMember ? 'Editar Integrante' : 'Nuevo Integrante'}</h2>
               <CloseButton onClick={() => setIsModalOpen(false)}>×</CloseButton>
             </ModalHeader>
-            <Form>
+            <Form onSubmit={handleSave}>
               <FormGroup>
-                <label>Nombre completo</label>
+                <label>Nombre</label>
                 <Input 
                   type="text" 
-                  defaultValue={selectedMember?.nombre || ''} 
-                  placeholder="Ej: María González"
+                  name="nombre"
+                  value={memberForm.nombre}
+                  onChange={handleFormChange}
+                  placeholder="Ej: Juan"
                 />
               </FormGroup>
-              
               <FormGroup>
-                <label>Correo electrónico</label>
+                <label>Apellidos</label>
+                <Input 
+                  type="text" 
+                  name="apellidos"
+                  value={memberForm.apellidos}
+                  onChange={handleFormChange}
+                  placeholder="Ej: Pérez López"
+                />
+              </FormGroup>
+              <FormGroup>
+                <label>Semestre</label>
+                <Input 
+                  type="text" 
+                  name="semestre"
+                  value={memberForm.semestre}
+                  onChange={handleFormChange}
+                  placeholder="Ej: 5to"
+                />
+              </FormGroup>
+              <FormGroup>
+                <label>Carrera</label>
+                <Input 
+                  type="text" 
+                  name="carrera"
+                  value={memberForm.carrera}
+                  onChange={handleFormChange}
+                  placeholder="Ej: Ingeniería en Sistemas"
+                />
+              </FormGroup>
+              <FormGroup>
+                <label>Número de Control</label>
+                <Input 
+                  type="text" 
+                  name="numeroControl"
+                  value={memberForm.numeroControl}
+                  onChange={handleFormChange}
+                  placeholder="Ej: 202012345"
+                />
+              </FormGroup>
+              <FormGroup>
+                <label>Correo</label>
                 <Input 
                   type="email" 
-                  defaultValue={selectedMember?.email || ''} 
-                  placeholder="Ej: ejemplo@correo.com"
+                  name="correo"
+                  value={memberForm.correo}
+                  onChange={handleFormChange}
+                  placeholder="Ej: correo@dominio.com"
                 />
               </FormGroup>
-
-              <FormGroup>
-                <label>Equipo asociado</label>
-                <Select defaultValue={selectedMember?.equipo || ''}>
-                  <option value="">Seleccionar equipo</option>
-                  {mockTeams.map((team, index) => (
-                    <option key={index} value={team}>{team}</option>
-                  ))}
-                </Select>
-              </FormGroup>
-
               <ModalActions>
-                <ActionButton onClick={() => setIsModalOpen(false)}>
+                <ActionButton type="button" onClick={() => setIsModalOpen(false)}>
                   Cancelar
                 </ActionButton>
-                <ActionButton variant="info">Guardar</ActionButton>
+                <ActionButton type="submit" variant="info">
+                  Guardar
+                </ActionButton>
               </ModalActions>
             </Form>
           </Modal>
         </ModalBackdrop>
       )}
 
-      {/* Modal de confirmación */}
+      {/* Modal de confirmación para eliminar integrante */}
       {isDeleteModalOpen && (
         <ModalBackdrop>
           <Modal>
-            <h3>¿Eliminar a {selectedMember?.nombre}?</h3>
+            <h3>¿Eliminar a {selectedMember?.nombre} {selectedMember?.apellidos}?</h3>
             <p>Esta acción eliminará todos los datos asociados al integrante</p>
             <ModalActions>
               <ActionButton onClick={() => setIsDeleteModalOpen(false)}>
                 Cancelar
               </ActionButton>
-              <ActionButton variant="danger">Eliminar</ActionButton>
+              <ActionButton variant="danger" onClick={handleConfirmDelete}>
+                Eliminar
+              </ActionButton>
             </ModalActions>
           </Modal>
         </ModalBackdrop>
@@ -129,13 +265,12 @@ export function Integrantes() {
   );
 }
 
-// Estilos (similar a Estadisticas.jsx pero con mejoras)
+// Estilos
 const Container = styled.div`
   height: 100vh;
   overflow-x: auto;
   background-color: ${({ theme }) => theme.bgPrimary};
   padding: 15px 30px;
-  height:100vh;;
 `;
 
 const Header = styled.div`
@@ -168,7 +303,7 @@ const Modal = styled.div`
   width: 90%;
   max-width: 500px;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-
+  
   h2, h3, p {
     color: ${({ theme }) => theme.textprimary};
   }
@@ -177,6 +312,7 @@ const Modal = styled.div`
     color: ${({ theme }) => theme.texttertiary};
   }
 `;
+
 const ModalHeader = styled.div`
   display: flex;
   justify-content: space-between;
@@ -209,6 +345,7 @@ const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
   gap: 8px;
+  
   label {
     font-weight: 500;
     color: ${({ theme }) => theme.textPrimary};
@@ -239,4 +376,3 @@ const ModalActions = styled.div`
   gap: 15px;
   margin-top: 25px;
 `;
-

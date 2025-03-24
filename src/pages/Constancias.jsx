@@ -1,189 +1,224 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+
+// Firebase
+import { getApps, initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from 'firebase/firestore';
+
+// Configuración de Firebase (ajusta con tus datos)
+const firebaseConfig = {
+  apiKey: "AIzaSyAaXYIqtfjms2cB1N0oTyuirrJYk6qsmaw",
+  authDomain: "constanciasisc.firebaseapp.com",
+  projectId: "constanciasisc",
+  storageBucket: "constanciasisc.appspot.com",
+  messagingSenderId: "716702079630",
+  appId: "1:716702079630:web:7eb7ab3fc11f67ef9c07df",
+  measurementId: "G-KH8FQF19M6"
+};
+
+// Evitar inicializar Firebase más de una vez
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 export function Constancias() {
   const [constancias, setConstancias] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [teams, setTeams] = useState([]); // Documentos de la colección "equipos"
+  const [selectedTeams, setSelectedTeams] = useState([]); // Array de nombres de equipos seleccionados
+  const [nombreConcurso, setNombreConcurso] = useState('');
   const [plantilla, setPlantilla] = useState(null);
-  const [categoria, setCategoria] = useState('');
+  const fileInputRef = useRef(null);
 
-  // Datos iniciales
+  // Cargar equipos desde la colección "equipos"
   useEffect(() => {
-    const initialTeams = [
-      { 
-        nombre: "Equipo Alpha", 
-        integrantes: ["ANA PÉREZ", "CARLOS RUIZ"], 
-        categoria: "HACKATEC LOCAL 2025" 
-      },
-      { 
-        nombre: "Equipo Beta", 
-        integrantes: ["LUIS MARTÍNEZ"], 
-        categoria: "ESTRUCTURAS COMPLEJAS 2025" 
+    async function fetchTeams() {
+      try {
+        const equiposCol = collection(db, 'equipos'); // Asegúrate de que la colección se llame "equipos"
+        const snapshot = await getDocs(equiposCol);
+        const teamsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log("Equipos obtenidos:", teamsList);
+        setTeams(teamsList);
+      } catch (error) {
+        console.error("Error al cargar equipos:", error);
       }
-    ];
-    
-    setTeams(initialTeams);
+    }
+    fetchTeams();
   }, []);
 
-  const cargarPlantilla = async (categoria) => {
-    try {
-      const templateMap = {
-        'HACKATEC LOCAL 2025': '/plantillas/onstancia_hackatec_2025.pdf',
-        'ESTRUCTURAS COMPLEJAS 2025': '/plantillas/constancia_estructuras_2025.pdf'
-      };
-      
-      const response = await fetch(templateMap[categoria]);
-
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const pdfBytes = await response.arrayBuffer();
-
-      const header = new Uint8Array(pdfBytes.slice(0, 5));
+  // Manejar la subida de la plantilla PDF
+  const handlePlantillaUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const arrayBuffer = event.target.result;
+      // Validar que el archivo sea un PDF (que inicie con "%PDF-")
+      const header = new Uint8Array(arrayBuffer.slice(0, 5));
       if (String.fromCharCode(...header) !== '%PDF-') {
-        throw new Error('Archivo no es un PDF válido');
+        alert('El archivo seleccionado no es un PDF válido');
+        return;
       }
-      
-      setPlantilla(pdfBytes);
-      
-    } catch (error) {
-      console.error('Error cargando plantilla:', error);
-      alert(`Error cargando plantilla: ${error.message}`);
-    }
+      setPlantilla(arrayBuffer);
+      alert('Plantilla subida exitosamente');
+    };
+    reader.readAsArrayBuffer(file);
   };
 
-  const generarConstancia = async (nombre, equipo, categoria) => {
+  // Función para "cargar" la plantilla (se requiere que se haya subido)
+  const cargarPlantilla = async () => {
+    if (!plantilla) {
+      throw new Error("Debes subir la plantilla");
+    }
+    return plantilla;
+  };
+
+  // Función para obtener el nombre completo de un integrante a partir de su ID en la colección "integrantes"
+  async function getIntegranteNombreCompleto(integranteId) {
     try {
-      // Validar parámetros de entrada
-      if (!nombre || !equipo || !categoria) {
-        throw new Error('Faltan parámetros requeridos para generar la constancia');
+      const ref = doc(db, 'integrantes', integranteId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return integranteId;
+      const data = snap.data();
+      const nombre = data.nombre || "";
+      const apellidos = data.apellidos || "";
+      return `${nombre} ${apellidos}`.trim();
+    } catch (err) {
+      console.warn("Error al obtener integrante:", err);
+      return integranteId;
+    }
+  }
+
+  // Función para generar la constancia usando los campos de formulario
+  // Se rellenan solo "campoNombre" y "campoEquipo" con la fuente Patria (40 para nombre, 24 para equipo)
+  const generarConstancia = async (nombreIntegrante, nombreEquipo, pdfTemplate) => {
+    try {
+      if (!nombreIntegrante || !nombreEquipo) {
+        throw new Error('Faltan parámetros para generar la constancia');
       }
-  
-      // Verificar plantilla cargada
-      if (!plantilla) {
+      if (!pdfTemplate) {
         throw new Error('No se ha cargado ninguna plantilla PDF');
       }
-  
-      // Cargar documento PDF
-      const pdfDoc = await PDFDocument.load(plantilla);
+
+      const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
-  
-      // Cargar fuente personalizada
-      let font;
+
+      // Intentar cargar la fuente Patria (debe ser un archivo TTF válido)
+      let patriaFont;
       try {
-        const fontResponse = await fetch('/fonts/GolosText-VariableFont_wght.ttf');
-        if (!fontResponse.ok) throw new Error(`Error ${fontResponse.status} cargando fuente`);
+        const fontResponse = await fetch('/fonts/Patria.ttf');
+        if (!fontResponse.ok) throw new Error(`Error ${fontResponse.status} cargando fuente Patria`);
         const fontBytes = await fontResponse.arrayBuffer();
-        font = await pdfDoc.embedFont(fontBytes);
+        patriaFont = await pdfDoc.embedFont(fontBytes);
       } catch (fontError) {
-        console.warn('Usando fuente estándar debido a error en fuente personalizada:', fontError);
-        font = await pdfDoc.embedFont(PDFDocument.StandardFonts.Helvetica);
+        console.warn('No se pudo cargar la fuente Patria, usando Helvetica.', fontError);
+        patriaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
-  
-      // Obtener primera página
-      const pages = pdfDoc.getPages();
-      const firstPage = pages[0];
-  
-      // Configurar coordenadas (ajustar según tu plantilla)
-      const coordenadas = {
-        nombre: { x: 105, y: 135, size: 14 },
-        equipo: { x: 105, y: 165, size: 12 },
-        categoria: { x: 105, y: 185, size: 12 }
-      };
-  
-      // Función para dibujar texto con validación
-      const dibujarTexto = (texto, config) => {
-        if (!texto || typeof texto !== 'string') {
-          console.warn('Texto inválido para dibujar:', texto);
-          return;
-        }
-  
-        firstPage.drawText(texto.toUpperCase(), {
-          x: config.x,
-          y: config.y,
-          size: config.size,
-          font,
-          color: rgb(0, 0, 0),
-          align: 'center'
+
+      const form = pdfDoc.getForm();
+      try {
+        // Se asume que el PDF tiene los campos "campoNombre" y "campoEquipo"
+        const campoNombre = form.getTextField('campoNombre');
+        const campoEquipo = form.getTextField('campoEquipo');
+
+        // Rellenar los campos
+        campoNombre.setText(nombreIntegrante);
+        campoEquipo.setText(nombreEquipo);
+
+        // Actualizar apariencias: fuente Patria, tamaño 40 para nombre, 24 para equipo.
+        // **Nota:** La alineación (centrado) y la eliminación de bordes se deben configurar en el diseño del campo en la plantilla.
+        campoNombre.updateAppearances(patriaFont, {
+          fontSize: 40,
+          textColor: rgb(0, 0, 0),
         });
-      };
-  
-      // Insertar datos en el PDF
-      dibujarTexto(nombre, coordenadas.nombre);
-      dibujarTexto(equipo, coordenadas.equipo);
-      dibujarTexto(categoria, coordenadas.categoria);
-  
-      // Generar PDF modificado
+        campoEquipo.updateAppearances(patriaFont, {
+          fontSize: 24,
+          textColor: rgb(0, 0, 0),
+        });
+
+        // Aplanar el formulario para que no se vean los bordes ni las marcas de los campos.
+        form.flatten();
+      } catch (error) {
+        console.warn('El PDF no contiene los campos "campoNombre" y/o "campoEquipo".', error);
+      }
+
       const pdfBytes = await pdfDoc.save();
-      
-      // Validar PDF resultante
       if (!pdfBytes || pdfBytes.length < 1024) {
         throw new Error('El PDF generado está vacío o corrupto');
       }
-  
-      return new Blob([pdfBytes], { 
+
+      return new Blob([pdfBytes], {
         type: 'application/pdf',
         endings: 'transparent'
       });
-  
     } catch (error) {
-      console.error('Error crítico al generar constancia:', error);
-      throw new Error(`No se pudo generar la constancia: ${error.message}`);
+      console.error('Error al generar constancia:', error);
+      throw error;
     }
   };
 
+  // Función que genera constancias para cada integrante de cada equipo seleccionado y descarga un ZIP
   const handleGenerar = async () => {
     try {
-      if (!selectedTeam || !categoria) return;
-  
-      await cargarPlantilla(categoria);
-      if (!plantilla) throw new Error('No hay plantilla cargada');
-      
-      const team = teams.find(t => t.nombre === selectedTeam);
-      
-      for (const integrante of team.integrantes) {
-        const pdfBlob = await generarConstancia(integrante, team.nombre, categoria);
-        
-        // Verificar blob antes de crear URL
-        if (!(pdfBlob instanceof Blob)) {
-          throw new Error('El PDF generado no es válido');
-        }
-        
-        const blobUrl = URL.createObjectURL(pdfBlob);
-        
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = `CONSTANCIA_${integrante.replace(/ /g, '_')}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        // Liberar memoria
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      if (selectedTeams.length === 0) {
+        alert("Debes seleccionar al menos un equipo");
+        return;
       }
-  
-      setConstancias([...constancias, {
-        id: Date.now(),
-        equipo: selectedTeam,
-        integrantes: team.integrantes,
-        categoria,
+      if (!plantilla) {
+        alert("Debes subir la plantilla PDF");
+        return;
+      }
+      if (!nombreConcurso) {
+        alert("Debes escribir el nombre del concurso");
+        return;
+      }
+
+      const plantillaBytes = await cargarPlantilla();
+      const zip = new JSZip();
+
+      // Recorrer cada equipo seleccionado
+      for (const teamName of selectedTeams) {
+        const team = teams.find(t => t.nombre === teamName);
+        if (!team) throw new Error(`Equipo ${teamName} no encontrado`);
+
+        // Suponemos que team.integrantes es un array de IDs de la colección "integrantes"
+        for (const integranteId of team.integrantes) {
+          const nombreCompleto = await getIntegranteNombreCompleto(integranteId);
+          const pdfBlob = await generarConstancia(nombreCompleto, team.nombre, plantillaBytes);
+          // Usar el nombre completo en lugar del ID para el archivo (reemplazando espacios)
+          zip.file(`CONSTANCIA_${team.nombre}_${nombreCompleto.replace(/ /g, '_')}.pdf`, pdfBlob);
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, 'constancias.zip');
+
+      // Registrar historial en Firestore (opcional)
+      const historialEntry = {
+        equipos: selectedTeams,
+        concurso: nombreConcurso,
         fecha: new Date().toLocaleDateString('es-MX', {
           year: 'numeric',
           month: 'long',
           day: 'numeric'
         })
-      }]);
-  
+      };
+      await addDoc(collection(db, 'historial'), historialEntry);
+      setConstancias(prev => [...prev, { id: Date.now(), ...historialEntry }]);
+
     } catch (error) {
       console.error('Error generando constancias:', error);
-      alert(`Error al generar: ${error.message}`);
+      alert(`Error al generar constancias: ${error.message}`);
     }
   };
-    // Registrar en el historial
 
+  // Handler para el multi-select de equipos
+  const handleTeamsChange = (e) => {
+    const selectedOptions = Array.from(e.target.selectedOptions).map(option => option.value);
+    setSelectedTeams(selectedOptions);
+  };
 
   return (
     <Container>
@@ -193,32 +228,44 @@ export function Constancias() {
 
       <FormContainer>
         <FormGroup>
-          <label>Seleccionar Equipo</label>
-          <Select 
-            value={selectedTeam}
-            onChange={(e) => setSelectedTeam(e.target.value)}
-          >
-            <option value="">Selecciona un equipo</option>
-            {teams.map((team, index) => (
-              <option key={index} value={team.nombre}>{team.nombre}</option>
+          <label>Subir Plantilla (PDF)</label>
+          <HiddenFileInput
+            type="file"
+            accept="application/pdf"
+            ref={fileInputRef}
+            onChange={handlePlantillaUpload}
+          />
+          <UploadButton onClick={() => fileInputRef.current.click()}>
+            Agregar Archivo de Plantilla
+          </UploadButton>
+        </FormGroup>
+
+        <FormGroup>
+          <label>Nombre del Concurso</label>
+          <Input
+            type="text"
+            value={nombreConcurso}
+            onChange={(e) => setNombreConcurso(e.target.value)}
+            placeholder="Ej: Concurso de Programación 2025"
+          />
+        </FormGroup>
+
+        <FormGroup>
+          <label>Seleccionar Equipos</label>
+          <Select multiple value={selectedTeams} onChange={handleTeamsChange}>
+            {teams.map(team => (
+              <option key={team.id} value={team.nombre}>
+                {team.nombre}
+              </option>
             ))}
           </Select>
         </FormGroup>
 
-        <FormGroup>
-          <label>Seleccionar Categoría</label>
-          <Select
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-          >
-            <option value="">Selecciona categoría</option>
-            <option value="HACKATEC LOCAL 2025">HACKATEC Local</option>
-            <option value="ESTRUCTURAS COMPLEJAS 2025">Estructuras Complejas</option>
-          </Select>
-        </FormGroup>
-
-        <ActionButton onClick={handleGenerar} disabled={!selectedTeam || !categoria}>
-          Generar Constancias
+        <ActionButton
+          onClick={handleGenerar}
+          disabled={selectedTeams.length === 0 || !nombreConcurso || !plantilla}
+        >
+          Generar Constancias y Descargar ZIP
         </ActionButton>
       </FormContainer>
 
@@ -227,19 +274,17 @@ export function Constancias() {
         <Table>
           <thead>
             <tr>
-              <th>Equipo</th>
-              <th>Categoría</th>
+              <th>Equipos</th>
+              <th>Concurso</th>
               <th>Fecha</th>
-              <th>Integrantes</th>
             </tr>
           </thead>
           <tbody>
-            {constancias.map((constancia) => (
+            {constancias.map(constancia => (
               <tr key={constancia.id}>
-                <td>{constancia.equipo}</td>
-                <td>{constancia.categoria}</td>
+                <td>{constancia.equipos.join(', ')}</td>
+                <td>{constancia.concurso}</td>
                 <td>{constancia.fecha}</td>
-                <td>{constancia.integrantes.join(', ')}</td>
               </tr>
             ))}
           </tbody>
@@ -249,7 +294,8 @@ export function Constancias() {
   );
 }
 
-// Estilos
+// ESTILOS
+
 const Container = styled.div`
   padding: 2rem;
   max-width: 1200px;
@@ -294,9 +340,27 @@ const FormGroup = styled.div`
   }
 `;
 
-const Select = styled.select`
-  /* Estilos heredados de FormGroup */
+const HiddenFileInput = styled.input`
+  display: none;
 `;
+
+const UploadButton = styled.button`
+  padding: 0.8rem 1rem;
+  background: ${({ theme }) => theme.secondary || '#555'};
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-top: 0.5rem;
+  transition: opacity 0.3s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
+const Select = styled.select``;
 
 const ActionButton = styled.button`
   width: 100%;
@@ -317,6 +381,14 @@ const ActionButton = styled.button`
     background: ${({ theme }) => theme.disabled};
     cursor: not-allowed;
   }
+`;
+
+const Input = styled.input`
+  padding: 0.8rem;
+  width: 100%;
+  border: 2px solid ${({ theme }) => theme.border};
+  border-radius: 6px;
+  font-size: 1rem;
 `;
 
 const HistorySection = styled.section`
