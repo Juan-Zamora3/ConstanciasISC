@@ -15,6 +15,7 @@ export function MyRoutes({ setIsAuthenticated }) {
       <Route path="/integrantes" element={<Integrantes />} />
       <Route path="/constancias" element={<Constancias />} />
       <Route path="/configuracion" element={<Configuracion />} />
+      
     </Routes>
   );
 }
