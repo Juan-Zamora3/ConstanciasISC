@@ -8,6 +8,7 @@ import {
   AiOutlineSetting,
 } from "react-icons/ai";
 import { IoDocumentTextOutline } from "react-icons/io5";
+import { MdEmojiEvents } from "react-icons/md";
 import { FaUser } from "react-icons/fa";
 import { MdGroups } from "react-icons/md";
 import { MdOutlineAnalytics, MdLogout } from "react-icons/md";
@@ -39,10 +40,7 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }) {
         <AiOutlineLeft />
       </button>
       <div className="Logocontent">
-        <div className="imgcontent">
-          <img src={logo} />
-        </div>
-        <h2>Constancias ISC</h2>
+        <h2>Constancias</h2>
       </div>
       {linksArray.map(({ icon, label, to }) => (
         <div className="LinkContainer" key={label}>
@@ -72,22 +70,15 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }) {
       
       <div className="Themecontent">
         {sidebarOpen && <span className="titletheme">Dark mode</span>}
-        <div className="Togglecontent">
-          <div className="grid theme-container">
-            <div className="content">
-              <div className="demo">
-                <label className="switch" istheme={theme}>
-                  <input
-                    istheme={theme}
-                    type="checkbox"
-                    className="theme-swither"
-                    onClick={CambiarTheme}
-                  ></input>
-                  <span istheme={theme} className="slider round"></span>
-                </label>
-              </div>
-            </div>
-          </div>
+        <div className="ToggleSwitch">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={theme === "dark"}
+              onChange={CambiarTheme}
+            />
+            <span className="slider"></span>
+          </label>
         </div>
       </div>
     </Container>
@@ -96,6 +87,11 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }) {
 
 //#region Data links
 const linksArray = [
+  {
+    label: "Eventos",
+    icon: <MdEmojiEvents />,
+    to: "/eventos",
+  },
   {
     label: "Equipos",
     icon: <MdGroups />,
@@ -213,6 +209,7 @@ const Container = styled.div`
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 0 15%;
     .titletheme {
       display: block;
       padding: 10px;
@@ -222,72 +219,53 @@ const Container = styled.div`
       white-space: nowrap;
       overflow: hidden;
     }
-    .Togglecontent {
-      margin: ${({ isOpen }) => (isOpen ? `auto 40px` : `auto 15px`)};
-      width: 36px;
-      height: 20px;
-      border-radius: 10px;
-      transition: all 0.3s;
-      position: relative;
-      .theme-container {
-        background-blend-mode: multiply, multiply;
-        transition: 0.4s;
-        .grid {
-          display: grid;
-          justify-items: center;
-          align-content: center;
-          height: 100vh;
-          width: 100vw;
-          font-family: "Lato", sans-serif;
-        }
-        .demo {
-          font-size: 32px;
-          .switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-            .theme-swither {
-              opacity: 0;
-              width: 0;
-              height: 0;
-              &:checked + .slider:before {
-                left: 0px;
-                content: "⚫";
-                transform: translateX(26px);
-              }
-            }
-            .slider {
-              position: absolute;
-              cursor: pointer;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              background: ${({ themeUse }) =>
-                themeUse === "light" ? v.lightcheckbox : v.checkbox};
-
-              transition: 0.4s;
-              &::before {
-                position: absolute;
-                content: "⚪";
-                height: 0px;
-                width: 0px;
-                left: -10px;
-                top: 16px;
-                line-height: 0px;
-                transition: 0.4s;
-              }
-              &.round {
-                border-radius: 34px;
-
-                &::before {
-                  border-radius: 50%;
-                }
-              }
-            }
-          }
-        }
+    .ToggleSwitch {
+      margin: ${({ isOpen }) => (isOpen ? `auto 5px` : `auto 5px`)};
+      
+      /* Estilos para el toggle switch */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+      }
+      
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+      }
+      
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        bottom: 2px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+      
+      input:checked + .slider {
+        background-color: #2196F3;
+      }
+      
+      input:checked + .slider:before {
+        transform: translateX(20px);
       }
     }
   }

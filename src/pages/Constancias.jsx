@@ -88,7 +88,7 @@ export function Constancias() {
       // Intentar cargar fuente personalizada o usar Helvetica
       let customFont;
       try {
-        const fontResponse = await fetch('/fonts/Patria.ttf');
+        const fontResponse = await fetch('/fonts/GolosText-VariableFont_wght.ttf');
         const fontBytes = await fontResponse.arrayBuffer();
         customFont = await pdfDoc.embedFont(fontBytes);
       } catch {
