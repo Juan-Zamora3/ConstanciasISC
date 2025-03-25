@@ -679,13 +679,13 @@ const TablaContainer = styled.div`
 const Tabla = styled.table`
   width: 100%;
   border-collapse: collapse;
-  th, td {
+  th, td, {
     padding: 12px;
     text-align: left;
     border-bottom: 1px solid ${({ theme }) => theme.border || '#ccc'};
   }
   th {
-    background: ${({ theme }) => theme.bgsecondary || '#f0f0f0'};
+    background-color: ${({ theme }) => theme.bg2};
   }
 `;
 
