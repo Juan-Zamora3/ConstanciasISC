@@ -73,6 +73,7 @@ export function Eventos() {
   });
 
   const handleOpenEditModal = (evento) => {
+    setSelectedEvent(null);
     setEditModalOpen(true);
     setEditEventData({
       id: evento.id,                  // Importante para saber cuál doc actualizar
