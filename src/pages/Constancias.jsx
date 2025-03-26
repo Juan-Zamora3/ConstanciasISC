@@ -1,36 +1,40 @@
-// Constancias.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Asegúrate de apuntar a tu config real
+
+// Reutilizamos tu instancia de Firebase
+import { db } from '../firebaseConfig';
 
 export function Constancias() {
-  // Estados generales
+  // 1) Estados generales
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState('');
   const [teams, setTeams] = useState([]);
   const [plantillaPDF, setPlantillaPDF] = useState(null);
-  
-  // Control de checkboxes para equipos
-  const [checkedTeams, setCheckedTeams] = useState({});
-  
-  // Control para enviar por correo
-  const [sendByEmail, setSendByEmail] = useState(false);
-  
-  // Estado de carga para envío de correos
-  const [loadingEmail, setLoadingEmail] = useState(false);
 
-  // Previsualización
+  // 2) Checkboxes de equipos
+  const [checkedTeams, setCheckedTeams] = useState({});
+
+  // 3) Checkbox “Enviar por correo”
+  const [sendByEmail, setSendByEmail] = useState(false);
+
+  // 4) Previsualización
   const [pdfPreviews, setPdfPreviews] = useState([]);
   const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
 
-  // Referencia para el input de archivo
+  // 5) Para mostrar overlay mientras se envían correos
+  const [loadingEmail, setLoadingEmail] = useState(false);
+
+  // 6) Referencia para subir la plantilla
   const fileInputRef = useRef(null);
 
-  // Cargar eventos desde Firestore
+  // ------------------------------------------------------------------
+  // Cargar eventos al inicio
+  // ------------------------------------------------------------------
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -44,7 +48,10 @@ export function Constancias() {
     loadEvents();
   }, []);
 
-  // Cargar equipos e integrantes cuando se selecciona un evento
+  // ------------------------------------------------------------------
+  // Cuando cambia el evento seleccionado, cargar equipos + integrantes.
+  // Luego generar constancias de forma automática si ya hay plantilla.
+  // ------------------------------------------------------------------
   useEffect(() => {
     if (!selectedEvent) {
       setTeams([]);
@@ -64,7 +71,7 @@ export function Constancias() {
         const allTeams = await Promise.all(promises);
         setTeams(allTeams);
 
-        // Inicializar checkboxes en true para todos los equipos
+        // Marcar todos los equipos en true
         const initialChecks = {};
         allTeams.forEach(t => { initialChecks[t.id] = true; });
         setCheckedTeams(initialChecks);
@@ -73,7 +80,7 @@ export function Constancias() {
         setPdfPreviews([]);
         setCurrentPreviewIndex(0);
 
-        // Si ya se cargó una plantilla, generar constancias automáticamente para los equipos seleccionados
+        // Generar constancias automáticamente si tenemos plantilla
         if (plantillaPDF) {
           await handleGenerarConstancias();
         }
@@ -84,14 +91,17 @@ export function Constancias() {
     loadTeams();
   }, [selectedEvent]);
 
-  // Manejo de carga de la plantilla PDF
+  // ------------------------------------------------------------------
+  // Cargar la plantilla PDF
+  // ------------------------------------------------------------------
+  
   const handlePlantillaUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Verificar que sea un PDF
+      // Verificar que realmente sea PDF
       const header = new Uint8Array(arrayBuffer.slice(0, 5));
       if (String.fromCharCode(...header) !== '%PDF-') {
         alert('El archivo no es un PDF válido');
@@ -104,16 +114,46 @@ export function Constancias() {
     }
   };
 
-  // Generar constancias para equipos seleccionados y mostrar solo la vista previa
+
+  const generatePreviewsForSelectedTeams = async () => {
+    const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
+    const previewBlobs = [];
+    for (const team of selectedTeamsList) {
+      // Generamos la constancia para cada integrante del equipo
+      for (const integrante of team.integrantes) {
+        const participante = { teamName: team.nombre, ...integrante };
+        const pdfBytes = await generarPDFpara(participante, plantillaPDF);
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        previewBlobs.push(url);
+      }
+    }
+    setPdfPreviews(previewBlobs);
+    setCurrentPreviewIndex(0);
+  };
+  
+
+  useEffect(() => {
+    if (plantillaPDF && teams.length > 0) {
+      generatePreviewsForSelectedTeams();
+    }
+  }, [checkedTeams, plantillaPDF, teams]);
+  
+
+  // ------------------------------------------------------------------
+  // Generar TODAS las constancias => descarga ZIP + previsualización
+  // + si “enviar por correo” está marcado, enviar correos también
+  // ------------------------------------------------------------------
   const handleGenerarConstancias = async () => {
     if (!plantillaPDF) {
       alert('Por favor sube una plantilla PDF primero');
       return;
     }
-    // Filtrar equipos seleccionados
+
+    // Filtramos solo equipos marcados
     const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
 
-    // Juntar participantes
+    // Obtenemos todos los participantes
     const allParticipants = [];
     selectedTeamsList.forEach(team => {
       team.integrantes.forEach(integ => {
@@ -130,61 +170,118 @@ export function Constancias() {
     }
 
     try {
+      // Preparamos un ZIP
+      const zip = new JSZip();
       const previewBlobs = [];
 
-      // Generar PDFs individuales
+      // Generamos PDFs uno por uno
       for (let i = 0; i < allParticipants.length; i++) {
         const p = allParticipants[i];
         const pdfBytes = await generarPDFpara(p, plantillaPDF);
+
+        // Guardar en ZIP
+        const fileName = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre || '').replace(/\s/g, '_')}.pdf`;
+        zip.file(fileName, pdfBytes);
+
+        // Previsualización
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         previewBlobs.push(url);
       }
 
-      // Solo actualizamos la previsualización sin descargar
+      // Actualizamos el listado de previsualizaciones
       setPdfPreviews(previewBlobs);
       setCurrentPreviewIndex(0);
+
+      // Descargar ZIP final
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, 'constancias.zip');
+
+      // Si “enviar por correo” está activo, enviamos
+      if (sendByEmail) {
+        await handleEnviarCorreos();
+      }
     } catch (error) {
       console.error('Error generando constancias:', error);
       alert('Ocurrió un error durante la generación de constancias');
     }
   };
 
-  // Generar constancias para un solo equipo y mostrar vista previa (sin descarga)
-  const handleGenerarConstanciaEquipo = async (team) => {
-    if (!plantillaPDF) {
-      alert('Por favor sube una plantilla PDF primero');
-      return;
-    }
-    if (!team.integrantes || team.integrantes.length === 0) {
-      alert('El equipo no tiene integrantes');
-      return;
-    }
+  // ------------------------------------------------------------------
+  // Genera un PDF para un participante (código tal como en “pre”)
+  // ------------------------------------------------------------------
+  const generarPDFpara = async (participante, pdfTemplate) => {
     try {
-      const previewBlobs = [];
-      for (let i = 0; i < team.integrantes.length; i++) {
-        const integrante = team.integrantes[i];
-        const participante = { teamName: team.nombre, ...integrante };
-        const pdfBytes = await generarPDFpara(participante, plantillaPDF);
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        previewBlobs.push(url);
+      const { nombre = '', teamName = '' } = participante;
+      const pdfDoc = await PDFDocument.load(pdfTemplate);
+      pdfDoc.registerFontkit(fontkit);
+
+      // Intentamos usar Helvética si no hay fuente custom
+      let customFont;
+      try {
+        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      } catch {
+        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
-      setPdfPreviews(previewBlobs);
-      setCurrentPreviewIndex(0);
-    } catch (error) {
-      console.error('Error generando constancias para equipo:', error);
-      alert('Ocurrió un error al generar constancias para el equipo');
+
+      // Verificamos si hay campos de formulario en la plantilla
+      const form = pdfDoc.getForm();
+      const fields = form.getFields();
+
+      if (fields.length > 0) {
+        // Buscar campos "nombre" y "equipo" (código original “pre”)
+        fields.forEach(field => {
+          const fieldName = field.getName().toLowerCase();
+          if (fieldName.includes('nombre')) field.setText(nombre);
+          if (fieldName.includes('equipo')) field.setText(teamName);
+        });
+        // Aplanar formulario
+        form.flatten();
+      } else {
+        // Si no hay campos de formulario, dibujamos texto en la página
+        const page = pdfDoc.getPages()[0];
+        const { width, height } = page.getSize();
+
+        // Nombre en grande
+        const fontSize = 30;
+        const textWidth = customFont.widthOfTextAtSize(nombre, fontSize);
+        page.drawText(nombre, {
+          x: (width - textWidth) / 2,
+          y: height / 2,
+          font: customFont,
+          size: fontSize,
+          color: rgb(0, 0, 0),
+        });
+
+        // Equipo más pequeño abajo
+        const teamTextSize = 15;
+        const teamTextWidth = customFont.widthOfTextAtSize(teamName, teamTextSize);
+        page.drawText(teamName, {
+          x: (width - teamTextWidth) / 2,
+          y: (height / 2) - 40,
+          font: customFont,
+          size: teamTextSize,
+          color: rgb(0, 0, 0),
+        });
+      }
+
+      return await pdfDoc.save();
+    } catch (err) {
+      console.error('Error generando PDF individual:', err);
+      throw err;
     }
   };
 
-  // Enviar constancias por correo
+  // ------------------------------------------------------------------
+  // Enviar constancias por correo (lógica intacta de “post”)
+  // ------------------------------------------------------------------
   const handleEnviarCorreos = async () => {
     if (!plantillaPDF) {
       alert('Por favor sube una plantilla PDF primero');
       return;
     }
-    // Filtrar equipos seleccionados
+
+    // Tomamos equipos/participantes marcados
     const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
     const allParticipants = [];
     selectedTeamsList.forEach(team => {
@@ -205,12 +302,12 @@ export function Constancias() {
     try {
       for (let i = 0; i < allParticipants.length; i++) {
         const p = allParticipants[i];
-        // Solo enviar si el participante tiene el campo "correo"
+        // Solo enviamos si tiene correo
         if (!p.correo) continue;
         const pdfBytes = await generarPDFpara(p, plantillaPDF);
-        // Convertir pdfBytes a base64
         const base64Pdf = arrayBufferToBase64(pdfBytes);
-        // Realizar la petición al servidor Express
+
+        // Petición al servidor
         const response = await fetch('http://localhost:3000/enviarConstancia', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -234,7 +331,9 @@ export function Constancias() {
     }
   };
 
-  // Función auxiliar para convertir ArrayBuffer a base64
+  // ------------------------------------------------------------------
+  // Función auxiliar para convertir ArrayBuffer a base64 (intacta)
+  // ------------------------------------------------------------------
   const arrayBufferToBase64 = (buffer) => {
     let binary = '';
     const bytes = new Uint8Array(buffer);
@@ -244,99 +343,9 @@ export function Constancias() {
     return window.btoa(binary);
   };
 
-  // Generar PDF para un participante llenando campos específicos
-  const generarPDFpara = async (participante, pdfTemplate) => {
-    try {
-      const { nombre = '', teamName = '' } = participante;
-      const pdfDoc = await PDFDocument.load(pdfTemplate);
-      pdfDoc.registerFontkit(fontkit);
-      // Usar fuente Helvetica regular (sin negritas)
-      const customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-
-      const form = pdfDoc.getForm();
-      const fields = form.getFields();
-
-      if (fields.length > 0) {
-        let nombreSet = false;
-        let equipoSet = false;
-        fields.forEach(field => {
-          const fieldName = field.getName().toLowerCase();
-          if (fieldName.includes('nombre')) {
-            if (typeof field.setFont === 'function') {
-              field.setFont(customFont);
-              // Establecemos el tamaño deseado para el campo
-              field.setFontSize(35);
-              field.setText(nombre);
-              nombreSet = true;
-            }
-          }
-          if (fieldName.includes('equipo')) {
-            if (typeof field.setFont === 'function') {
-              field.setFont(customFont);
-              field.setFontSize(18);
-              field.setText(teamName);
-              equipoSet = true;
-            }
-          }
-        });
-        form.flatten();
-
-        // Si algún campo no pudo llenarse, se dibuja manualmente en la página
-        const page = pdfDoc.getPages()[0];
-        const { width, height } = page.getSize();
-        if (!nombreSet) {
-          const fontSizeNombre = 35;
-          const textWidth = customFont.widthOfTextAtSize(nombre, fontSizeNombre);
-          page.drawText(nombre, {
-            x: (width - textWidth) / 2,
-            y: height / 2,
-            font: customFont,
-            size: fontSizeNombre,
-            color: rgb(0, 0, 0)
-          });
-        }
-        if (!equipoSet) {
-          const fontSizeEquipo = 18;
-          const teamTextWidth = customFont.widthOfTextAtSize(teamName, fontSizeEquipo);
-          page.drawText(teamName, {
-            x: (width - teamTextWidth) / 2,
-            y: (height / 2) - 50,
-            font: customFont,
-            size: fontSizeEquipo,
-            color: rgb(0, 0, 0)
-          });
-        }
-      } else {
-        // Si la plantilla no tiene campos de formulario, se dibuja manualmente en la página
-        const page = pdfDoc.getPages()[0];
-        const { width, height } = page.getSize();
-        const fontSizeNombre = 35;
-        const textWidth = customFont.widthOfTextAtSize(nombre, fontSizeNombre);
-        page.drawText(nombre, {
-          x: (width - textWidth) / 2,
-          y: height / 2,
-          font: customFont,
-          size: fontSizeNombre,
-          color: rgb(0, 0, 0)
-        });
-        const fontSizeEquipo = 18;
-        const teamTextWidth = customFont.widthOfTextAtSize(teamName, fontSizeEquipo);
-        page.drawText(teamName, {
-          x: (width - teamTextWidth) / 2,
-          y: (height / 2) - 50,
-          font: customFont,
-          size: fontSizeEquipo,
-          color: rgb(0, 0, 0)
-        });
-      }
-      return await pdfDoc.save();
-    } catch (err) {
-      console.error('Error generando PDF individual:', err);
-      throw err;
-    }
-  };
-
-  // Navegación en la previsualización
+  // ------------------------------------------------------------------
+  // Navegación de previsualización (sin cambios)
+  // ------------------------------------------------------------------
   const handleNextPreview = () => {
     if (pdfPreviews.length === 0) return;
     setCurrentPreviewIndex((prev) => (prev + 1) % pdfPreviews.length);
@@ -347,7 +356,9 @@ export function Constancias() {
     setCurrentPreviewIndex((prev) => (prev - 1 + pdfPreviews.length) % pdfPreviews.length);
   };
 
-  // Alternar selección de equipo
+  // ------------------------------------------------------------------
+  // Toggle de selección de equipo
+  // ------------------------------------------------------------------
   const toggleCheckTeam = (teamId) => {
     setCheckedTeams(prev => ({
       ...prev,
@@ -355,8 +366,12 @@ export function Constancias() {
     }));
   };
 
+  // ------------------------------------------------------------------
+  // Render principal
+  // ------------------------------------------------------------------
   return (
     <Container>
+      {/* Panel Izquierdo */}
       <LeftPanel>
         <Section>
           <Label>Plantilla PDF</Label>
@@ -366,17 +381,25 @@ export function Constancias() {
             ref={fileInputRef}
             onChange={handlePlantillaUpload}
           />
-          <Button onClick={() => fileInputRef.current.click()} style={{ marginTop: '5px' }}>
+          <Button
+            onClick={() => fileInputRef.current.click()}
+            style={{ marginTop: '5px' }}
+          >
             {plantillaPDF ? 'Plantilla cargada ✓' : 'Seleccionar archivo...'}
           </Button>
         </Section>
 
         <Section>
           <Label>Seleccionar Evento</Label>
-          <Select value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
+          <Select
+            value={selectedEvent}
+            onChange={(e) => setSelectedEvent(e.target.value)}
+          >
             <option value="">-- Selecciona un evento --</option>
             {events.map(ev => (
-              <option key={ev.id} value={ev.id}>{ev.nombre}</option>
+              <option key={ev.id} value={ev.id}>
+                {ev.nombre}
+              </option>
             ))}
           </Select>
         </Section>
@@ -390,11 +413,10 @@ export function Constancias() {
                   <th></th>
                   <th>Equipo</th>
                   <th># Integrantes</th>
-                  <th>Acción</th>
                 </tr>
               </thead>
               <tbody>
-                {teams.map(t => (
+                {teams.map((t) => (
                   <tr key={t.id}>
                     <td>
                       <input
@@ -405,9 +427,6 @@ export function Constancias() {
                     </td>
                     <td>{t.nombre}</td>
                     <td>{t.integrantes?.length || 0}</td>
-                    <td>
-                      <Button onClick={() => handleGenerarConstanciaEquipo(t)}>Generar</Button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -427,16 +446,13 @@ export function Constancias() {
         </Section>
 
         <Section>
-          <Button onClick={handleGenerarConstancias}>Generar Constancias</Button>
+          <Button onClick={handleGenerarConstancias}>
+            Generar Constancias
+          </Button>
         </Section>
-
-        {sendByEmail && (
-          <Section>
-            <Button onClick={handleEnviarCorreos}>Enviar Constancias por Correo</Button>
-          </Section>
-        )}
       </LeftPanel>
 
+      {/* Panel Derecho: Previsualización */}
       <RightPanel>
         <PreviewArea>
           {pdfPreviews.length > 0 ? (
@@ -447,7 +463,9 @@ export function Constancias() {
               style={{ width: '100%', height: '100%', border: 'none' }}
             />
           ) : (
-            <Placeholder>Aquí se mostrará la constancia generada</Placeholder>
+            <Placeholder>
+              Aquí se mostrará la constancia generada
+            </Placeholder>
           )}
         </PreviewArea>
         <PreviewNav>
@@ -461,17 +479,22 @@ export function Constancias() {
           <NavButton onClick={handleNextPreview}>{'>'}</NavButton>
         </PreviewNav>
       </RightPanel>
-      
+
+      {/* Overlay de carga al enviar correos */}
       {loadingEmail && (
         <LoadingOverlay>
-          <LoadingMessage>Enviando constancias, por favor espere...</LoadingMessage>
+          <LoadingMessage>
+            Enviando constancias, por favor espere...
+          </LoadingMessage>
         </LoadingOverlay>
       )}
     </Container>
   );
 }
 
-// Estilos con styled-components
+// ------------------------------------------------------------------
+// Estilos con styled-components (sin cambios relevantes)
+// ------------------------------------------------------------------
 const Container = styled.div`
   display: flex;
   height: 100vh;
@@ -558,6 +581,13 @@ const CheckboxRow = styled.label`
   font-size: 0.95rem;
 `;
 
+const PreviewArea = styled.div`
+  flex: 1;
+  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
 const PreviewNav = styled.div`
   display: flex;
   align-items: center;
@@ -577,13 +607,6 @@ const NavButton = styled.button`
   &:hover {
     opacity: 0.8;
   }
-`;
-
-const PreviewArea = styled.div`
-  flex: 1;
-  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
-  border-radius: 8px;
-  overflow: hidden;
 `;
 
 const Placeholder = styled.div`
