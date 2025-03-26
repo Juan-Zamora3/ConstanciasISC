@@ -1,37 +1,36 @@
+// Constancias.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
-import { getFirestore, collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
-
-// Si ya inicializaste Firebase afuera, reutiliza esa instancia:
+import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig'; // Asegúrate de apuntar a tu config real
 
 export function Constancias() {
-  // 1) Estados generales
+  // Estados generales
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState('');
-  const [teams, setTeams] = useState([]); 
+  const [teams, setTeams] = useState([]);
   const [plantillaPDF, setPlantillaPDF] = useState(null);
+  
+  // Control de checkboxes para equipos
+  const [checkedTeams, setCheckedTeams] = useState({});
+  
+  // Control para enviar por correo
+  const [sendByEmail, setSendByEmail] = useState(false);
+  
+  // Estado de carga para envío de correos
+  const [loadingEmail, setLoadingEmail] = useState(false);
 
-  // Para los checkboxes de equipos
-  const [checkedTeams, setCheckedTeams] = useState({}); // {teamId: true/false}
-  
-  // Checkbox (desactivado) para “enviar por correo”
-  const [sendByEmail, setSendByEmail] = useState(false); // pero estará disabled
-  
-  // Para la previsualización
-  const [pdfPreviews, setPdfPreviews] = useState([]); // array de URLs o dataURIs
+  // Previsualización
+  const [pdfPreviews, setPdfPreviews] = useState([]);
   const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
-  
-  // Referencia para subir la plantilla
+
+  // Referencia para el input de archivo
   const fileInputRef = useRef(null);
 
-  // -----------------------------------------------------------
-  // 2) Cargar eventos
-  // -----------------------------------------------------------
+  // Cargar eventos desde Firestore
   useEffect(() => {
     const loadEvents = async () => {
       try {
@@ -45,60 +44,54 @@ export function Constancias() {
     loadEvents();
   }, []);
 
-  // -----------------------------------------------------------
-  // 3) Cuando cambia el evento seleccionado, cargar equipos+integrantes
-  // -----------------------------------------------------------
-useEffect(() => {
-  if (!selectedEvent) {
-    setTeams([]);
-    return;
-  }
-  const loadTeams = async () => {
-    try {
-      const q = query(collection(db, 'equipos'), where('eventoId', '==', selectedEvent));
-      const snapTeams = await getDocs(q);
-      const promises = snapTeams.docs.map(async (teamDoc) => {
-        const teamData = { id: teamDoc.id, ...teamDoc.data() };
-        const qInteg = query(collection(db, 'integrantes'), where('equipoId', '==', teamDoc.id));
-        const snapInteg = await getDocs(qInteg);
-        teamData.integrantes = snapInteg.docs.map(d => ({ id: d.id, ...d.data() }));
-        return teamData;
-      });
-
-      const allTeams = await Promise.all(promises);
-      setTeams(allTeams);
-
-      // Inicialmente, todos los checkboxes en true
-      const initialChecks = {};
-      allTeams.forEach(t => { initialChecks[t.id] = true; });
-      setCheckedTeams(initialChecks);
-
-      // Limpiar previsualizaciones al cambiar de evento
-      setPdfPreviews([]);
-      setCurrentPreviewIndex(0);
-
-      // Llamar a la generación automática
-      if (plantillaPDF) {
-        await handleGenerarConstancias();
-      }
-    } catch (error) {
-      console.error('Error cargando equipos:', error);
+  // Cargar equipos e integrantes cuando se selecciona un evento
+  useEffect(() => {
+    if (!selectedEvent) {
+      setTeams([]);
+      return;
     }
-  };
-  loadTeams();
-}, [selectedEvent]);
+    const loadTeams = async () => {
+      try {
+        const q = query(collection(db, 'equipos'), where('eventoId', '==', selectedEvent));
+        const snapTeams = await getDocs(q);
+        const promises = snapTeams.docs.map(async (teamDoc) => {
+          const teamData = { id: teamDoc.id, ...teamDoc.data() };
+          const qInteg = query(collection(db, 'integrantes'), where('equipoId', '==', teamDoc.id));
+          const snapInteg = await getDocs(qInteg);
+          teamData.integrantes = snapInteg.docs.map(d => ({ id: d.id, ...d.data() }));
+          return teamData;
+        });
+        const allTeams = await Promise.all(promises);
+        setTeams(allTeams);
 
+        // Inicializar checkboxes en true para todos los equipos
+        const initialChecks = {};
+        allTeams.forEach(t => { initialChecks[t.id] = true; });
+        setCheckedTeams(initialChecks);
 
-  // -----------------------------------------------------------
-  // 4) Manejo de carga de la plantilla PDF
-  // -----------------------------------------------------------
+        // Limpiar previsualizaciones
+        setPdfPreviews([]);
+        setCurrentPreviewIndex(0);
+
+        // Si ya se cargó una plantilla, generar constancias automáticamente para los equipos seleccionados
+        if (plantillaPDF) {
+          await handleGenerarConstancias();
+        }
+      } catch (error) {
+        console.error('Error cargando equipos:', error);
+      }
+    };
+    loadTeams();
+  }, [selectedEvent]);
+
+  // Manejo de carga de la plantilla PDF
   const handlePlantillaUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Comprobación rápida para ver si es PDF
+      // Verificar que sea un PDF
       const header = new Uint8Array(arrayBuffer.slice(0, 5));
       if (String.fromCharCode(...header) !== '%PDF-') {
         alert('El archivo no es un PDF válido');
@@ -111,10 +104,7 @@ useEffect(() => {
     }
   };
 
-  // -----------------------------------------------------------
-  // 5) Generar TODAS las constancias y guardarlas en ZIP
-  //    + preparar previsualización
-  // -----------------------------------------------------------
+  // Generar constancias para equipos seleccionados y mostrar solo la vista previa
   const handleGenerarConstancias = async () => {
     if (!plantillaPDF) {
       alert('Por favor sube una plantilla PDF primero');
@@ -123,7 +113,7 @@ useEffect(() => {
     // Filtrar equipos seleccionados
     const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
 
-    // Juntar a todos los integrantes de los equipos marcados
+    // Juntar participantes
     const allParticipants = [];
     selectedTeamsList.forEach(team => {
       team.integrantes.forEach(integ => {
@@ -140,105 +130,205 @@ useEffect(() => {
     }
 
     try {
-      // Preparamos un ZIP
-      const zip = new JSZip();
-
-      // Para la previsualización
       const previewBlobs = [];
 
-      // Generar PDFs uno por uno
+      // Generar PDFs individuales
       for (let i = 0; i < allParticipants.length; i++) {
         const p = allParticipants[i];
-        // Generar el PDF individual
         const pdfBytes = await generarPDFpara(p, plantillaPDF);
-        // Guardar en ZIP
-        const fileName = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre || '').replace(/\s/g, '_')}.pdf`;
-        zip.file(fileName, pdfBytes);
-
-        // Para la previsualización, creamos un objeto URL
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         previewBlobs.push(url);
       }
 
-      // Almacenar para mostrar en el visor
+      // Solo actualizamos la previsualización sin descargar
       setPdfPreviews(previewBlobs);
       setCurrentPreviewIndex(0);
-
-      // Descargar ZIP
-      const content = await zip.generateAsync({ type: 'blob' });
-      saveAs(content, 'constancias.zip');
-
-      // Ojo: Podrías mandar un registro a "historial" u otro lugar si gustas
     } catch (error) {
       console.error('Error generando constancias:', error);
       alert('Ocurrió un error durante la generación de constancias');
     }
   };
 
-  // -----------------------------------------------------------
-  // 6) Genera un PDF para un participante (usando pdf-lib)
-  //    Reutiliza la lógica previa
-  // -----------------------------------------------------------
+  // Generar constancias para un solo equipo y mostrar vista previa (sin descarga)
+  const handleGenerarConstanciaEquipo = async (team) => {
+    if (!plantillaPDF) {
+      alert('Por favor sube una plantilla PDF primero');
+      return;
+    }
+    if (!team.integrantes || team.integrantes.length === 0) {
+      alert('El equipo no tiene integrantes');
+      return;
+    }
+    try {
+      const previewBlobs = [];
+      for (let i = 0; i < team.integrantes.length; i++) {
+        const integrante = team.integrantes[i];
+        const participante = { teamName: team.nombre, ...integrante };
+        const pdfBytes = await generarPDFpara(participante, plantillaPDF);
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        previewBlobs.push(url);
+      }
+      setPdfPreviews(previewBlobs);
+      setCurrentPreviewIndex(0);
+    } catch (error) {
+      console.error('Error generando constancias para equipo:', error);
+      alert('Ocurrió un error al generar constancias para el equipo');
+    }
+  };
+
+  // Enviar constancias por correo
+  const handleEnviarCorreos = async () => {
+    if (!plantillaPDF) {
+      alert('Por favor sube una plantilla PDF primero');
+      return;
+    }
+    // Filtrar equipos seleccionados
+    const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
+    const allParticipants = [];
+    selectedTeamsList.forEach(team => {
+      team.integrantes.forEach(integ => {
+        allParticipants.push({
+          teamName: team.nombre,
+          ...integ,
+        });
+      });
+    });
+
+    if (allParticipants.length === 0) {
+      alert('No hay integrantes seleccionados para enviar correo');
+      return;
+    }
+
+    setLoadingEmail(true);
+    try {
+      for (let i = 0; i < allParticipants.length; i++) {
+        const p = allParticipants[i];
+        // Solo enviar si el participante tiene el campo "correo"
+        if (!p.correo) continue;
+        const pdfBytes = await generarPDFpara(p, plantillaPDF);
+        // Convertir pdfBytes a base64
+        const base64Pdf = arrayBufferToBase64(pdfBytes);
+        // Realizar la petición al servidor Express
+        const response = await fetch('http://localhost:3000/enviarConstancia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            correo: p.correo,
+            nombre: p.nombre,
+            equipo: p.teamName,
+            pdf: base64Pdf
+          })
+        });
+        if (!response.ok) {
+          console.error(`Error enviando correo a ${p.correo}`);
+        }
+      }
+      alert('Correos enviados correctamente');
+    } catch (error) {
+      console.error('Error al enviar correos:', error);
+      alert('Error al enviar correos');
+    } finally {
+      setLoadingEmail(false);
+    }
+  };
+
+  // Función auxiliar para convertir ArrayBuffer a base64
+  const arrayBufferToBase64 = (buffer) => {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  };
+
+  // Generar PDF para un participante llenando campos específicos
   const generarPDFpara = async (participante, pdfTemplate) => {
     try {
       const { nombre = '', teamName = '' } = participante;
       const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
+      // Usar fuente Helvetica regular (sin negritas)
+      const customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-      // Intentar fuente custom, si no está, usa Helvetica
-      let customFont;
-      try {
-        // Ejemplo: si tuvieras una fuente custom en tu servidor:
-        // const fontResponse = await fetch('/fonts/GolosText-VariableFont_wght.ttf');
-        // const fontBytes = await fontResponse.arrayBuffer();
-        // customFont = await pdfDoc.embedFont(fontBytes);
-        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      } catch {
-        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      }
-
-      // Si la plantilla trae formularios, intenta rellenarlos
       const form = pdfDoc.getForm();
       const fields = form.getFields();
 
       if (fields.length > 0) {
-        // Buscar campos "nombre" y "equipo"
+        let nombreSet = false;
+        let equipoSet = false;
         fields.forEach(field => {
           const fieldName = field.getName().toLowerCase();
-          if (fieldName.includes('nombre')) field.setText(nombre);
-          if (fieldName.includes('equipo')) field.setText(teamName);
+          if (fieldName.includes('nombre')) {
+            if (typeof field.setFont === 'function') {
+              field.setFont(customFont);
+              // Establecemos el tamaño deseado para el campo
+              field.setFontSize(35);
+              field.setText(nombre);
+              nombreSet = true;
+            }
+          }
+          if (fieldName.includes('equipo')) {
+            if (typeof field.setFont === 'function') {
+              field.setFont(customFont);
+              field.setFontSize(18);
+              field.setText(teamName);
+              equipoSet = true;
+            }
+          }
         });
-        // Aplanar formulario
         form.flatten();
-      } else {
-        // Dibujar texto en la primera página
+
+        // Si algún campo no pudo llenarse, se dibuja manualmente en la página
         const page = pdfDoc.getPages()[0];
         const { width, height } = page.getSize();
-
-        // Nombre grande
-        const fontSize = 30;
-        const textWidth = customFont.widthOfTextAtSize(nombre, fontSize);
+        if (!nombreSet) {
+          const fontSizeNombre = 35;
+          const textWidth = customFont.widthOfTextAtSize(nombre, fontSizeNombre);
+          page.drawText(nombre, {
+            x: (width - textWidth) / 2,
+            y: height / 2,
+            font: customFont,
+            size: fontSizeNombre,
+            color: rgb(0, 0, 0)
+          });
+        }
+        if (!equipoSet) {
+          const fontSizeEquipo = 18;
+          const teamTextWidth = customFont.widthOfTextAtSize(teamName, fontSizeEquipo);
+          page.drawText(teamName, {
+            x: (width - teamTextWidth) / 2,
+            y: (height / 2) - 50,
+            font: customFont,
+            size: fontSizeEquipo,
+            color: rgb(0, 0, 0)
+          });
+        }
+      } else {
+        // Si la plantilla no tiene campos de formulario, se dibuja manualmente en la página
+        const page = pdfDoc.getPages()[0];
+        const { width, height } = page.getSize();
+        const fontSizeNombre = 35;
+        const textWidth = customFont.widthOfTextAtSize(nombre, fontSizeNombre);
         page.drawText(nombre, {
           x: (width - textWidth) / 2,
           y: height / 2,
           font: customFont,
-          size: fontSize,
-          color: rgb(0, 0, 0),
+          size: fontSizeNombre,
+          color: rgb(0, 0, 0)
         });
-
-        // Nombre equipo abajo
-        const teamTextSize = 15;
-        const teamTextWidth = customFont.widthOfTextAtSize(teamName, teamTextSize);
+        const fontSizeEquipo = 18;
+        const teamTextWidth = customFont.widthOfTextAtSize(teamName, fontSizeEquipo);
         page.drawText(teamName, {
           x: (width - teamTextWidth) / 2,
-          y: (height / 2) - 40,
+          y: (height / 2) - 50,
           font: customFont,
-          size: teamTextSize,
-          color: rgb(0, 0, 0),
+          size: fontSizeEquipo,
+          color: rgb(0, 0, 0)
         });
       }
-
       return await pdfDoc.save();
     } catch (err) {
       console.error('Error generando PDF individual:', err);
@@ -246,10 +336,18 @@ useEffect(() => {
     }
   };
 
-  // -----------------------------------------------------------
-  // 7) Render principal
-  // -----------------------------------------------------------
-  // Funciones para la tabla de equipos con checkboxes
+  // Navegación en la previsualización
+  const handleNextPreview = () => {
+    if (pdfPreviews.length === 0) return;
+    setCurrentPreviewIndex((prev) => (prev + 1) % pdfPreviews.length);
+  };
+
+  const handlePrevPreview = () => {
+    if (pdfPreviews.length === 0) return;
+    setCurrentPreviewIndex((prev) => (prev - 1 + pdfPreviews.length) % pdfPreviews.length);
+  };
+
+  // Alternar selección de equipo
   const toggleCheckTeam = (teamId) => {
     setCheckedTeams(prev => ({
       ...prev,
@@ -257,19 +355,8 @@ useEffect(() => {
     }));
   };
 
-  // Navegación en previsualización
-  const handleNextPreview = () => {
-    if (pdfPreviews.length === 0) return;
-    setCurrentPreviewIndex((prev) => (prev + 1) % pdfPreviews.length);
-  };
-  const handlePrevPreview = () => {
-    if (pdfPreviews.length === 0) return;
-    setCurrentPreviewIndex((prev) => (prev - 1 + pdfPreviews.length) % pdfPreviews.length);
-  };
-
   return (
     <Container>
-      {/* Barra izquierda */}
       <LeftPanel>
         <Section>
           <Label>Plantilla PDF</Label>
@@ -279,25 +366,17 @@ useEffect(() => {
             ref={fileInputRef}
             onChange={handlePlantillaUpload}
           />
-          <Button
-            onClick={() => fileInputRef.current.click()}
-            style={{ marginTop: '5px' }}
-          >
+          <Button onClick={() => fileInputRef.current.click()} style={{ marginTop: '5px' }}>
             {plantillaPDF ? 'Plantilla cargada ✓' : 'Seleccionar archivo...'}
           </Button>
         </Section>
 
         <Section>
           <Label>Seleccionar Evento</Label>
-          <Select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-          >
+          <Select value={selectedEvent} onChange={(e) => setSelectedEvent(e.target.value)}>
             <option value="">-- Selecciona un evento --</option>
             {events.map(ev => (
-              <option key={ev.id} value={ev.id}>
-                {ev.nombre}
-              </option>
+              <option key={ev.id} value={ev.id}>{ev.nombre}</option>
             ))}
           </Select>
         </Section>
@@ -311,10 +390,11 @@ useEffect(() => {
                   <th></th>
                   <th>Equipo</th>
                   <th># Integrantes</th>
+                  <th>Acción</th>
                 </tr>
               </thead>
               <tbody>
-                {teams.map((t) => (
+                {teams.map(t => (
                   <tr key={t.id}>
                     <td>
                       <input
@@ -325,6 +405,9 @@ useEffect(() => {
                     </td>
                     <td>{t.nombre}</td>
                     <td>{t.integrantes?.length || 0}</td>
+                    <td>
+                      <Button onClick={() => handleGenerarConstanciaEquipo(t)}>Generar</Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -336,22 +419,24 @@ useEffect(() => {
           <CheckboxRow>
             <input
               type="checkbox"
-              disabled
               checked={sendByEmail}
               onChange={() => setSendByEmail(!sendByEmail)}
             />
-            <span style={{ marginLeft: '8px' }}>Enviar por correo (desactivado)</span>
+            <span style={{ marginLeft: '8px' }}>Enviar por correo</span>
           </CheckboxRow>
         </Section>
 
         <Section>
-          <Button onClick={handleGenerarConstancias}>
-            Generar Constancias
-          </Button>
+          <Button onClick={handleGenerarConstancias}>Generar Constancias</Button>
         </Section>
+
+        {sendByEmail && (
+          <Section>
+            <Button onClick={handleEnviarCorreos}>Enviar Constancias por Correo</Button>
+          </Section>
+        )}
       </LeftPanel>
 
-      {/* Panel derecho: previsualización */}
       <RightPanel>
         <PreviewArea>
           {pdfPreviews.length > 0 ? (
@@ -368,22 +453,25 @@ useEffect(() => {
         <PreviewNav>
           <NavButton onClick={handlePrevPreview}>{'<'}</NavButton>
           <span>
-            {pdfPreviews.length === 0 
-              ? 'Sin previsualizaciones' 
+            {pdfPreviews.length === 0
+              ? 'Sin previsualizaciones'
               : `Constancia ${currentPreviewIndex + 1} / ${pdfPreviews.length}`
             }
           </span>
           <NavButton onClick={handleNextPreview}>{'>'}</NavButton>
         </PreviewNav>
-
       </RightPanel>
+      
+      {loadingEmail && (
+        <LoadingOverlay>
+          <LoadingMessage>Enviando constancias, por favor espere...</LoadingMessage>
+        </LoadingOverlay>
+      )}
     </Container>
   );
 }
 
-// -----------------------------------------------------------
 // Estilos con styled-components
-// -----------------------------------------------------------
 const Container = styled.div`
   display: flex;
   height: 100vh;
@@ -507,4 +595,25 @@ const Placeholder = styled.div`
   justify-content: center;
   color: ${({ theme }) => theme.texttertiary};
   font-size: 0.9rem;
+`;
+
+const LoadingOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+`;
+
+const LoadingMessage = styled.div`
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  font-weight: bold;
 `;
