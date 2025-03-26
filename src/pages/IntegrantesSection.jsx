@@ -352,9 +352,12 @@ const AddButton = styled.button`
 
 // Reutilizamos lo de la tabla
 export const TableContainer = styled.div`
-  width: 100%;
-  overflow-x: auto;
-  margin-top: 1rem;
+ max-height: 400px;  /* Altura máxima con scroll */
+  overflow-y: auto;   /* Scroll vertical */
+  overflow-x: auto;   /* Scroll horizontal */
+  margin-top: 20px;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border || '#ddd'};
 `;
 
 export const ThemeTable = styled.table`
@@ -372,9 +375,9 @@ export const ThemeTableHeader = styled.th`
 `;
 
 export const ThemeTableRow = styled.tr`
-  &:nth-child(even) {
+
     background-color: ${({ theme }) => theme.bg2};
-  }
+  
   &:hover {
     background-color: ${({ theme }) => theme.bgHover || '#ddd'};
   }

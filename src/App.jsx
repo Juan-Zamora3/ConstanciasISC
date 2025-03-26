@@ -10,7 +10,7 @@ import { MyRoutes } from "./routers/routes"; // Asegurar que existe este archivo
 export const ThemeContext = React.createContext(null);
 
 function App() {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
   const themeStyle = theme === "light" ? Light : Dark;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
