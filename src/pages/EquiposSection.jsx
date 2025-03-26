@@ -149,7 +149,7 @@ useEffect(() => {
               />
             </FormGroup>
 
-            <table>
+            <Tabla>
                 <thead>
                     <tr>
                     <th>Nombre</th>
@@ -174,7 +174,7 @@ useEffect(() => {
                     </tr>
                     ))}
                 </tbody>
-            </table>
+            </Tabla>
 
             <ModalActions>
               <SecondaryButton onClick={() => setEditModalOpen(false)}>
@@ -307,4 +307,20 @@ const SecondaryButton = styled.button`
   padding: 10px 20px;
   border-radius: 6px;
   cursor: pointer;
+`;
+
+const Tabla = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  
+  th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  th {
+    background-color: ${({ theme }) => theme.bgSecondary};
+  }
 `;
