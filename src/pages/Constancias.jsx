@@ -5,7 +5,7 @@ import fontkit from '@pdf-lib/fontkit';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { getFirestore, collection, getDocs, query, where } from 'firebase/firestore';
-
+import { PDFName, PDFNumber } from 'pdf-lib';
 // Reutilizamos tu instancia de Firebase
 import { db } from '../firebaseConfig';
 
@@ -243,7 +243,7 @@ export function Constancias() {
         const { width, height } = page.getSize();
 
         // Nombre en grande
-        const fontSize = 30;
+        const fontSize = 90;
         const textWidth = customFont.widthOfTextAtSize(nombre, fontSize);
         page.drawText(nombre, {
           x: (width - textWidth) / 2,
