@@ -140,41 +140,42 @@ export function Equipos() {
           Agregar Equipo
         </ActionButton>
       </Header>
-
-      <Table>
-        <thead>
-          <TableRow>
-            <TableHeader>Nombre del equipo</TableHeader>
-            <TableHeader>Categoría</TableHeader>
-            <TableHeader>Integrantes</TableHeader>
-            <TableHeader>Acciones</TableHeader>
-          </TableRow>
-        </thead>
-        <tbody>
-          {equipos.map((team) => {
-            // Si el equipo tiene un array de integrantes (ids), se obtienen los nombres completos
-            const teamIntegrantes = team.integrantes 
-              ? integrantes
-                  .filter(integ => team.integrantes.includes(integ.id))
-                  .map(integ => `${integ.nombre} ${integ.apellidos}`)
-              : [];
-            return (
-              <TableRow key={team.id}>
-                <TableCell>{team.nombre}</TableCell>
-                <TableCell>{team.categoria}</TableCell>
-                <TableCell>{teamIntegrantes.join(', ')}</TableCell>
-                <TableCell>
-                  <ActionButton variant="info">Ver</ActionButton>
-                  <ActionButton onClick={() => handleEdit(team)}>Editar</ActionButton>
-                  <ActionButton variant="danger" onClick={() => handleDelete(team)}>
-                    Eliminar
-                  </ActionButton>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </tbody>
-      </Table>
+      <Conteinertabla>
+        <Table>
+          <thead>
+            <TableRow>
+              <TableHeader>Nombre del equipo</TableHeader>
+              <TableHeader>Categoría</TableHeader>
+              <TableHeader>Integrantes</TableHeader>
+              <TableHeader>Acciones</TableHeader>
+            </TableRow>
+          </thead>
+          <tbody>
+            {equipos.map((team) => {
+              // Si el equipo tiene un array de integrantes (ids), se obtienen los nombres completos
+              const teamIntegrantes = team.integrantes 
+                ? integrantes
+                    .filter(integ => team.integrantes.includes(integ.id))
+                    .map(integ => `${integ.nombre} ${integ.apellidos}`)
+                : [];
+              return (
+                <TableRow key={team.id}>
+                  <TableCell>{team.nombre}</TableCell>
+                  <TableCell>{team.categoria}</TableCell>
+                  <TableCell>{teamIntegrantes.join(', ')}</TableCell>
+                  <TableCell>
+                    <ActionButton variant="info">Ver</ActionButton>
+                    <ActionButton onClick={() => handleEdit(team)}>Editar</ActionButton>
+                    <ActionButton variant="danger" onClick={() => handleDelete(team)}>
+                      Eliminar
+                    </ActionButton>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </tbody>
+        </Table>
+      </Conteinertabla>
 
       {/* Modal para agregar/editar equipo */}
       {isModalOpen && (
@@ -364,4 +365,11 @@ const CheckboxLabel = styled.label`
 
 const Checkbox = styled.input`
   cursor: pointer;
+`;
+
+const Conteinertabla = styled.div`
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+
 `;

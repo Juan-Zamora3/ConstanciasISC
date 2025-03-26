@@ -1,98 +1,121 @@
-// src/pages/IntegrantesSection.jsx
+// IntegrantesSection.jsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDocs
+} from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 export function IntegrantesSection({ eventoId }) {
   const [integrantes, setIntegrantes] = useState([]);
   const [equipos, setEquipos] = useState([]);
 
+  // Para modal de agregar integrante
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-
-  // Campos para agregar
-  const [newIntegrante, setNewIntegrante] = useState({
+  const [newInteg, setNewInteg] = useState({
     nombre: '',
-    apellidos: '',
+    numControl: '',
+    carrera: '',
+    semestre: '',
+    correo: '',
     equipoId: ''
   });
 
-  // Para editar
+  // Para modal de editar integrante
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedIntegrante, setSelectedIntegrante] = useState(null);
   const [editData, setEditData] = useState({
     nombre: '',
-    apellidos: '',
+    numControl: '',
+    carrera: '',
+    semestre: '',
+    correo: '',
     equipoId: ''
   });
 
-  // Cargar equipos de este evento
+  // Cargar equipos para el combo (así el usuario elige a cuál equipo pertenece)
   useEffect(() => {
-    const q = query(collection(db, 'equipos'), where('eventoId', '==', eventoId));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const arr = [];
-      snapshot.forEach((docSnap) => {
-        arr.push({ id: docSnap.id, ...docSnap.data() });
-      });
+    const qEquipos = query(collection(db, 'equipos'), where('eventoId', '==', eventoId));
+    const unsubEq = onSnapshot(qEquipos, (snap) => {
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setEquipos(arr);
     });
-    return () => unsub();
+    return () => unsubEq();
   }, [eventoId]);
 
-  // Cargar integrantes de este evento
+  // Cargar integrantes
   useEffect(() => {
-    const q = query(collection(db, 'integrantes'), where('eventoId', '==', eventoId));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const arr = [];
-      snapshot.forEach((docSnap) => {
-        arr.push({ id: docSnap.id, ...docSnap.data() });
-      });
+    const qInteg = query(collection(db, 'integrantes'), where('eventoId', '==', eventoId));
+    const unsubInt = onSnapshot(qInteg, (snap) => {
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setIntegrantes(arr);
     });
-    return () => unsub();
+    return () => unsubInt();
   }, [eventoId]);
 
-  // Abrir modal para agregar un integrante
+  // ------------------- Agregar Integrante
   const handleOpenAddModal = () => {
-    setNewIntegrante({ nombre: '', apellidos: '', equipoId: '' });
+    setNewInteg({
+      nombre: '',
+      numControl: '',
+      carrera: '',
+      semestre: '',
+      correo: '',
+      equipoId: ''
+    });
     setAddModalOpen(true);
   };
+  const handleCloseAddModal = () => setAddModalOpen(false);
 
-  // Guardar nuevo integrante
   const handleAddIntegrante = async () => {
-    if (!newIntegrante.nombre || !newIntegrante.equipoId) {
-      alert('Completa el nombre y selecciona equipo');
+    if (!newInteg.nombre.trim() || !newInteg.equipoId) {
+      alert('Completa el nombre y el equipo');
       return;
     }
     try {
       await addDoc(collection(db, 'integrantes'), {
         eventoId,
-        nombre: newIntegrante.nombre,
-        apellidos: newIntegrante.apellidos,
-        equipoId: newIntegrante.equipoId
+        equipoId: newInteg.equipoId,
+        nombre: newInteg.nombre,
+        numControl: newInteg.numControl,
+        carrera: newInteg.carrera,
+        semestre: newInteg.semestre,
+        correo: newInteg.correo
       });
+      alert('Integrante agregado');
       setAddModalOpen(false);
     } catch (error) {
       console.error('Error al agregar integrante:', error);
-      alert('Ocurrió un error al agregar integrante');
+      alert('No se pudo agregar');
     }
   };
 
-  // Abrir modal para editar un integrante
-  const handleOpenEditModal = (integ) => {
-    setSelectedIntegrante(integ);
+  // ------------------- Editar Integrante
+  const handleOpenEditModal = (item) => {
+    setSelectedIntegrante(item);
     setEditData({
-      nombre: integ.nombre,
-      apellidos: integ.apellidos,
-      equipoId: integ.equipoId
+      nombre: item.nombre,
+      numControl: item.numControl,
+      carrera: item.carrera,
+      semestre: item.semestre,
+      correo: item.correo,
+      equipoId: item.equipoId
     });
     setEditModalOpen(true);
   };
+  const handleCloseEditModal = () => setEditModalOpen(false);
 
-  // Guardar cambios al editar
   const handleEditIntegrante = async () => {
     if (!selectedIntegrante) return;
-    if (!editData.nombre || !editData.equipoId) {
+    if (!editData.nombre.trim() || !editData.equipoId) {
       alert('Completa el nombre y equipo');
       return;
     }
@@ -100,9 +123,13 @@ export function IntegrantesSection({ eventoId }) {
       const ref = doc(db, 'integrantes', selectedIntegrante.id);
       await updateDoc(ref, {
         nombre: editData.nombre,
-        apellidos: editData.apellidos,
+        numControl: editData.numControl,
+        carrera: editData.carrera,
+        semestre: editData.semestre,
+        correo: editData.correo,
         equipoId: editData.equipoId
       });
+      alert('Integrante actualizado');
       setEditModalOpen(false);
     } catch (error) {
       console.error('Error al editar integrante:', error);
@@ -110,13 +137,11 @@ export function IntegrantesSection({ eventoId }) {
     }
   };
 
-  // Eliminar integrante
-  const handleDeleteIntegrante = async (integ) => {
-    if (!window.confirm(`¿Eliminar a ${integ.nombre} ${integ.apellidos}?`)) {
-      return;
-    }
+  // ------------------- Eliminar Integrante
+  const handleDeleteIntegrante = async (item) => {
+    if (!window.confirm(`¿Eliminar a "${item.nombre}"?`)) return;
     try {
-      await deleteDoc(doc(db, 'integrantes', integ.id));
+      await deleteDoc(doc(db, 'integrantes', item.id));
     } catch (error) {
       console.error('Error al eliminar integrante:', error);
       alert('No se pudo eliminar');
@@ -124,102 +149,122 @@ export function IntegrantesSection({ eventoId }) {
   };
 
   return (
-    <>
+    <Container>
       <HeaderBar>
-        <Button onClick={handleOpenAddModal}>+ Agregar Integrante</Button>
+        <AddButton onClick={handleOpenAddModal}>+ Agregar Integrante</AddButton>
       </HeaderBar>
 
       <TableContainer>
-        <table>
+        <ThemeTable>
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>No. Control</th>
-              <th>Carrera</th>
-              <th>Semestre</th>
-              <th>Correo</th>
-              <th>Equipo</th>
-              <th>Acciones</th>
+              <ThemeTableHeader>Nombre</ThemeTableHeader>
+              <ThemeTableHeader>No. Control</ThemeTableHeader>
+              <ThemeTableHeader>Carrera</ThemeTableHeader>
+              <ThemeTableHeader>Semestre</ThemeTableHeader>
+              <ThemeTableHeader>Correo</ThemeTableHeader>
+              <ThemeTableHeader>Equipo</ThemeTableHeader>
+              <ThemeTableHeader>Acciones</ThemeTableHeader>
             </tr>
           </thead>
           <tbody>
-            {integrantes.map((ing) => (
-              <tr key={ing.id}>
-                <td>{ing.nombre}</td>
-                <td>{ing.numControl}</td>
-                <td>{ing.carrera}</td>
-                <td>{ing.semestre}</td>
-                <td>{ing.correo}</td>
-                <td>{ing.equipoId}</td> 
-                {/* O puedes buscar el nombre de equipo consultando la coleccion 'equipos' */}
-                <td>
-                  {/* Botones de editar/eliminar */}
-                </td>
-              </tr>
-            ))}
+            {integrantes.map((item) => {
+              // Buscar el nombre del equipo
+              const eq = equipos.find((e) => e.id === item.equipoId);
+              return (
+                <ThemeTableRow key={item.id}>
+                  <ThemeTableCell>{item.nombre}</ThemeTableCell>
+                  <ThemeTableCell>{item.numControl}</ThemeTableCell>
+                  <ThemeTableCell>{item.carrera}</ThemeTableCell>
+                  <ThemeTableCell>{item.semestre}</ThemeTableCell>
+                  <ThemeTableCell>{item.correo}</ThemeTableCell>
+                  <ThemeTableCell>{eq ? eq.nombre : 'Sin equipo'}</ThemeTableCell>
+                  <ThemeTableCell>
+                    <ActionButton onClick={() => handleOpenEditModal(item)}>Editar</ActionButton>
+                    <ActionButton variant="danger" onClick={() => handleDeleteIntegrante(item)}>
+                      Eliminar
+                    </ActionButton>
+                  </ThemeTableCell>
+                </ThemeTableRow>
+              );
+            })}
           </tbody>
-        </table>
+        </ThemeTable>
       </TableContainer>
 
-      {/* Modal para agregar integrante */}
+      {/* Modal Agregar Integrante */}
       {addModalOpen && (
         <ModalBackdrop>
           <Modal>
             <ModalHeader>
-              <h3>Agregar Integrante</h3>
-              <CloseButton onClick={() => setAddModalOpen(false)}>×</CloseButton>
+              <h2>Agregar Integrante</h2>
+              <CloseButton onClick={handleCloseAddModal}>×</CloseButton>
             </ModalHeader>
             <FormGroup>
               <label>Nombre</label>
               <input 
-                value={newIntegrante.nombre}
-                onChange={(e) => 
-                  setNewIntegrante({ ...newIntegrante, nombre: e.target.value })
-                }
+                value={newInteg.nombre}
+                onChange={(e) => setNewInteg({ ...newInteg, nombre: e.target.value })}
               />
             </FormGroup>
             <FormGroup>
-              <label>Apellidos</label>
-              <input 
-                value={newIntegrante.apellidos}
-                onChange={(e) => 
-                  setNewIntegrante({ ...newIntegrante, apellidos: e.target.value })
-                }
+              <label>No. Control</label>
+              <input
+                value={newInteg.numControl}
+                onChange={(e) => setNewInteg({ ...newInteg, numControl: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Carrera</label>
+              <input
+                value={newInteg.carrera}
+                onChange={(e) => setNewInteg({ ...newInteg, carrera: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Semestre</label>
+              <input
+                value={newInteg.semestre}
+                onChange={(e) => setNewInteg({ ...newInteg, semestre: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Correo</label>
+              <input
+                value={newInteg.correo}
+                onChange={(e) => setNewInteg({ ...newInteg, correo: e.target.value })}
               />
             </FormGroup>
             <FormGroup>
               <label>Equipo</label>
               <select
-                value={newIntegrante.equipoId}
-                onChange={(e) => 
-                  setNewIntegrante({ ...newIntegrante, equipoId: e.target.value })
-                }
+                value={newInteg.equipoId}
+                onChange={(e) => setNewInteg({ ...newInteg, equipoId: e.target.value })}
               >
-                <option value="">-- Seleccionar Equipo --</option>
+                <option value="">-- Selecciona un equipo --</option>
                 {equipos.map((eq) => (
-                  <option value={eq.id} key={eq.id}>{eq.nombre}</option>
+                  <option key={eq.id} value={eq.id}>
+                    {eq.nombre}
+                  </option>
                 ))}
               </select>
             </FormGroup>
+
             <ModalActions>
-              <SecondaryButton onClick={() => setAddModalOpen(false)}>
-                Cancelar
-              </SecondaryButton>
-              <PrimaryButton onClick={handleAddIntegrante}>
-                Guardar
-              </PrimaryButton>
+              <SecondaryButton onClick={handleCloseAddModal}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={handleAddIntegrante}>Guardar</PrimaryButton>
             </ModalActions>
           </Modal>
         </ModalBackdrop>
       )}
 
-      {/* Modal para editar integrante */}
+      {/* Modal Editar Integrante */}
       {editModalOpen && selectedIntegrante && (
         <ModalBackdrop>
           <Modal>
             <ModalHeader>
-              <h3>Editar Integrante</h3>
-              <CloseButton onClick={() => setEditModalOpen(false)}>×</CloseButton>
+              <h2>Editar Integrante</h2>
+              <CloseButton onClick={handleCloseEditModal}>×</CloseButton>
             </ModalHeader>
             <FormGroup>
               <label>Nombre</label>
@@ -229,10 +274,31 @@ export function IntegrantesSection({ eventoId }) {
               />
             </FormGroup>
             <FormGroup>
-              <label>Apellidos</label>
-              <input 
-                value={editData.apellidos}
-                onChange={(e) => setEditData({ ...editData, apellidos: e.target.value })}
+              <label>No. Control</label>
+              <input
+                value={editData.numControl}
+                onChange={(e) => setEditData({ ...editData, numControl: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Carrera</label>
+              <input
+                value={editData.carrera}
+                onChange={(e) => setEditData({ ...editData, carrera: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Semestre</label>
+              <input
+                value={editData.semestre}
+                onChange={(e) => setEditData({ ...editData, semestre: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Correo</label>
+              <input
+                value={editData.correo}
+                onChange={(e) => setEditData({ ...editData, correo: e.target.value })}
               />
             </FormGroup>
             <FormGroup>
@@ -241,67 +307,102 @@ export function IntegrantesSection({ eventoId }) {
                 value={editData.equipoId}
                 onChange={(e) => setEditData({ ...editData, equipoId: e.target.value })}
               >
-                <option value="">-- Seleccionar Equipo --</option>
+                <option value="">-- Selecciona un equipo --</option>
                 {equipos.map((eq) => (
-                  <option value={eq.id} key={eq.id}>{eq.nombre}</option>
+                  <option key={eq.id} value={eq.id}>
+                    {eq.nombre}
+                  </option>
                 ))}
               </select>
             </FormGroup>
+
             <ModalActions>
-              <SecondaryButton onClick={() => setEditModalOpen(false)}>
-                Cancelar
-              </SecondaryButton>
-              <PrimaryButton onClick={handleEditIntegrante}>
-                Guardar
-              </PrimaryButton>
+              <SecondaryButton onClick={handleCloseEditModal}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={handleEditIntegrante}>Guardar</PrimaryButton>
             </ModalActions>
           </Modal>
         </ModalBackdrop>
       )}
-    </>
+    </Container>
   );
 }
 
-// ----------------- Estilos -----------------
+// -------------------- Estilos (viejo formato) --------------------
+const Container = styled.div`
+  padding: 1rem;
+`;
+
 const HeaderBar = styled.div`
+  display: flex;
+  justify-content: space-between;
   margin-bottom: 1rem;
 `;
 
-const Button = styled.button`
-  padding: 10px 20px;
-  background: ${({ theme }) => theme.primary || '#347ba7'};
+const AddButton = styled.button`
+  padding: 8px 16px;
+  background: ${({ theme }) => theme.primary};
   color: #fff;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-`;
-
-const TableContainer = styled.div`
-  overflow-x: auto;
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-    }
-    th {
-      background: ${({ theme }) => theme.bg4 || '#ccc'};
-      color: ${({ theme }) => theme.textsecondary || '#fff'};
-    }
+  &:hover {
+    opacity: 0.9;
   }
 `;
 
-const SmallButton = styled.button`
-  margin-right: 5px;
-  background: ${({ theme }) => theme.primary};
-  border: none;
-  color: #fff;
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
+// Reutilizamos lo de la tabla
+export const TableContainer = styled.div`
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 1rem;
 `;
 
+export const ThemeTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+`;
+
+export const ThemeTableHeader = styled.th`
+  padding: 12px;
+  text-align: left;
+  background-color: ${({ theme }) => theme.bg4};
+  color: ${({ theme }) => theme.textsecondary};
+  border-bottom: 2px solid ${({ theme }) => theme.border};
+`;
+
+export const ThemeTableRow = styled.tr`
+  &:nth-child(even) {
+    background-color: ${({ theme }) => theme.bg2};
+  }
+  &:hover {
+    background-color: ${({ theme }) => theme.bgHover || '#ddd'};
+  }
+`;
+
+export const ThemeTableCell = styled.td`
+  padding: 12px;
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+`;
+
+export const ActionButton = styled.button`
+  padding: 6px 12px;
+  margin-right: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: ${({ theme, variant }) => 
+    variant === 'danger' 
+      ? '#e74c3c' 
+      : theme.primary
+  };
+  color: #fff;
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
+// ------------ Modales y formularios -----------
 const ModalBackdrop = styled.div`
   position: fixed;
   top: 0;
@@ -316,20 +417,22 @@ const ModalBackdrop = styled.div`
 `;
 
 const Modal = styled.div`
-  background: ${({ theme }) => theme.bg2 || '#f9f9f9'};
+  background: ${({ theme }) => theme.bg};
   width: 90%;
-  max-width: 500px;
-  padding: 20px;
+  max-width: 600px;
   border-radius: 8px;
+  padding: 1rem 1.5rem;
   position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
 `;
 
 const ModalHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-  h3 {
+  margin-bottom: 1rem;
+  h2 {
     margin: 0;
   }
 `;
@@ -344,14 +447,14 @@ const CloseButton = styled.button`
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  margin-bottom: 15px;
+  margin-bottom: 1rem;
   label {
-    font-weight: bold;
-    margin-bottom: 5px;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
   }
   input, select {
     padding: 8px;
-    border: 1px solid #ccc;
+    border: 1px solid ${({ theme }) => theme.border};
     border-radius: 6px;
   }
 `;
@@ -359,23 +462,23 @@ const FormGroup = styled.div`
 const ModalActions = styled.div`
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 1rem;
+  margin-top: 1rem;
 `;
 
 const PrimaryButton = styled.button`
-  background: ${({ theme }) => theme.primary || '#347ba7'};
+  background: ${({ theme }) => theme.primary};
   color: #fff;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
 `;
 
 const SecondaryButton = styled.button`
-  background: ${({ theme }) => theme.bg || '#eee'};
-  color: ${({ theme }) => theme.text || '#000'};
-  border: 1px solid #ccc;
-  padding: 10px 20px;
+  background: ${({ theme }) => theme.bg2};
+  border: 1px solid ${({ theme }) => theme.border};
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
 `;
