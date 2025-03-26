@@ -215,56 +215,80 @@ export function Constancias() {
       const { nombre = '', teamName = '' } = participante;
       const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
-
-      // Intentamos usar Helvética si no hay fuente custom
+  
+      // Configuración de tamaños de fuente (ajustar según necesidad)
+      const TAMANO_NOMBRE = 36;
+      const TAMANO_EQUIPO = 14;
+      const ESPACIADO_VERTICAL = 60; // Espacio entre nombre y equipo
+  
+      // Cargar fuente (usar misma fuente que la plantilla)
       let customFont;
       try {
-        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      } catch {
+        customFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      } catch (error) {
         customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
-
-      // Verificamos si hay campos de formulario en la plantilla
+  
+      // Manejo de campos de formulario
       const form = pdfDoc.getForm();
       const fields = form.getFields();
-
+  
       if (fields.length > 0) {
-        // Buscar campos "nombre" y "equipo" (código original “pre”)
+        // Si hay campos de formulario
         fields.forEach(field => {
           const fieldName = field.getName().toLowerCase();
-          if (fieldName.includes('nombre')) field.setText(nombre);
-          if (fieldName.includes('equipo')) field.setText(teamName);
+          
+          // Campo para nombre con formato específico
+          if (fieldName.includes('nombre')) {
+            field.setText(`A\n${nombre.toUpperCase()}`);
+            field.updateAppearances(customFont);
+          }
+  
+          // Campo para equipo con texto descriptivo
+          if (fieldName.includes('equipo')) {
+            field.setText(`Equipo: ${teamName}\nCategoría HACKATEC etapa local`);
+            field.updateAppearances(customFont);
+          }
         });
-        // Aplanar formulario
         form.flatten();
       } else {
-        // Si no hay campos de formulario, dibujamos texto en la página
+        // Dibujo directo en el PDF
         const page = pdfDoc.getPages()[0];
         const { width, height } = page.getSize();
-
-        // Nombre en grande
-        const fontSize = 90;
-        const textWidth = customFont.widthOfTextAtSize(nombre, fontSize);
-        page.drawText(nombre, {
-          x: (width - textWidth) / 2,
-          y: height / 2,
+  
+        // Texto "A" como prefijo
+        const prefijo = "A";
+        const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
+        page.drawText(prefijo, {
+          x: (width - prefijoWidth) / 2,
+          y: height / 2 + 40,
           font: customFont,
-          size: fontSize,
+          size: TAMANO_NOMBRE,
           color: rgb(0, 0, 0),
         });
-
-        // Equipo más pequeño abajo
-        const teamTextSize = 15;
-        const teamTextWidth = customFont.widthOfTextAtSize(teamName, teamTextSize);
-        page.drawText(teamName, {
-          x: (width - teamTextWidth) / 2,
-          y: (height / 2) - 40,
+  
+        // Nombre del participante
+        const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
+        page.drawText(nombre.toUpperCase(), {
+          x: (width - nombreWidth) / 2,
+          y: height / 2,
           font: customFont,
-          size: teamTextSize,
+          size: TAMANO_NOMBRE,
+          color: rgb(0, 0, 0),
+        });
+  
+        // Nombre del equipo
+        const equipoTexto = `Equipo: ${teamName}`;
+        const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
+        page.drawText(equipoTexto, {
+          x: (width - equipoWidth) / 2,
+          y: (height / 2) - ESPACIADO_VERTICAL,
+          font: customFont,
+          size: TAMANO_EQUIPO,
           color: rgb(0, 0, 0),
         });
       }
-
+  
       return await pdfDoc.save();
     } catch (err) {
       console.error('Error generando PDF individual:', err);
