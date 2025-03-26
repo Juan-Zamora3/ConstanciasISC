@@ -1,18 +1,25 @@
 // src/pages/EventoDetail.jsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Ajusta según tu export
+// Importamos db de tu firebaseConfig
+import { db } from '../firebaseConfig';
+
+// Importar subcomponentes (puedes ponerlos en archivos separados si gustas)
+import { EquiposSection } from './EquiposSection';
+import { IntegrantesSection } from './IntegrantesSection';
 
 export function EventoDetail() {
-  const { id } = useParams();       // ID del evento en la URL => /evento/:id
-  const navigate = useNavigate();   // Para navegar/volver
+  const { id } = useParams();        // ID del evento => /evento/:id
+  const navigate = useNavigate();
 
   const [evento, setEvento] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('equipos'); 
+  // "equipos" o "integrantes"
 
-  // Cargar datos del evento al montar el componente
+  // Cargar la info del evento
   useEffect(() => {
     const fetchEvento = async () => {
       try {
@@ -30,121 +37,111 @@ export function EventoDetail() {
     fetchEvento();
   }, [id]);
 
-  if (loading) {
-    return <p>Cargando evento...</p>;
-  }
+  if (loading) return <Container>Cargando Evento...</Container>;
+  if (!evento) return <Container>No se encontró el evento con ID: {id}</Container>;
 
-  if (!evento) {
-    return <p>No se encontró el evento con ID: {id}</p>;
-  }
-
-  // Función para regresar a la página anterior
+  // Función para volver (similar a la "X" de los modales)
   const handleGoBack = () => {
     navigate(-1);
   };
 
   return (
     <Container>
-      {/* Header con botón de volver */}
+      {/* Header con botón "X" a la izquierda y botones a la derecha */}
       <Header>
-        <BackButton onClick={handleGoBack}>Volver</BackButton>
-        <h2>{evento.nombre}</h2>
+        <LeftButtons>
+          <CloseButton onClick={handleGoBack}>×</CloseButton>
+          <Title>{evento.nombre}</Title>
+        </LeftButtons>
+        <RightButtons>
+          <NavButton 
+            isActive={activeTab === 'equipos'} 
+            onClick={() => setActiveTab('equipos')}
+          >
+            Equipos
+          </NavButton>
+          <NavButton
+            isActive={activeTab === 'integrantes'}
+            onClick={() => setActiveTab('integrantes')}
+          >
+            Integrantes
+          </NavButton>
+        </RightButtons>
       </Header>
 
-      <DetailsContainer>
-        <p><strong>Nombre:</strong> {evento.nombre}</p>
+      {/* Descripción y fecha del evento (opcional) */}
+      <EventInfo>
         <p><strong>Descripción:</strong> {evento.descripcion}</p>
         <p><strong>Fecha de Creación:</strong> {evento.fecha}</p>
-      </DetailsContainer>
+      </EventInfo>
 
-      {evento.participantes && evento.participantes.length > 0 && (
-        <>
-          <h3>Participantes</h3>
-          <TablaContainer>
-            <Tabla>
-              <thead>
-                <tr>
-                  <th>Equipo</th>
-                  <th>Alumnos</th>
-                  <th>No. Control</th>
-                  <th>Carrera</th>
-                  <th>Semestre</th>
-                  <th>Correo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evento.participantes.map((p, i) => (
-                  <tr key={i}>
-                    <td>{p.equipo}</td>
-                    <td>{p.alumnos}</td>
-                    <td>{p.numControl}</td>
-                    <td>{p.carrera}</td>
-                    <td>{p.semestre}</td>
-                    <td>{p.correo}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Tabla>
-          </TablaContainer>
-        </>
+      {/* Contenido principal */}
+      {activeTab === 'equipos' && (
+        <EquiposSection eventoId={evento.id} />
+      )}
+      {activeTab === 'integrantes' && (
+        <IntegrantesSection eventoId={evento.id} />
       )}
     </Container>
   );
 }
 
-// --------------------------------------------
-// Estilos con styled-components
-// --------------------------------------------
+// -------------------- Estilos --------------------
 const Container = styled.div`
-  padding: 20px 30px;
   background-color: ${({ theme }) => theme.bgtotal};
   color: ${({ theme }) => theme.textprimary};
   height: 100vh;
   overflow-y: auto;
+  padding: 20px 30px;
 `;
 
 const Header = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 2rem;
 `;
 
-const BackButton = styled.button`
-  background: ${({ theme }) => theme.bg4};
-  color: ${({ theme }) => theme.textsecondary};
+const LeftButtons = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const CloseButton = styled.button`
+  font-size: 35px;
+  background: none;
   border: none;
-  padding: 10px 15px;
+  cursor: pointer;
+  color: ${({ theme }) => theme.text|| '#999'};
+`;
+
+const Title = styled.h2`
+  margin: 0;
+  font-size: ${({ theme }) => theme.fontlg || '1.5rem'};
+`;
+
+const RightButtons = styled.div`
+  display: flex;
+  gap: 1rem;
+`;
+
+const NavButton = styled.button`
+  background: ${({ isActive, theme }) => 
+    isActive ? theme.primary : theme.bg2 || '#ccc'
+  };
+  color: ${({ isActive, theme }) => 
+    isActive ? '#fff' : theme.textprimary
+  };
+  border: none;
+  padding: 10px 18px;
   border-radius: 6px;
   cursor: pointer;
 `;
 
-const DetailsContainer = styled.div`
+const EventInfo = styled.div`
+  margin-bottom: 1.5rem;
   p {
-    margin: 0.5rem 0;
-  }
-`;
-
-const TablaContainer = styled.div`
-  margin-top: 1rem;
-  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
-  border-radius: 8px;
-  overflow: auto;
-  max-height: 300px;
-`;
-
-const Tabla = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid ${({ theme }) => theme.border || '#ccc'};
-    font-size: ${({ theme }) => theme.fontsm};
-  }
-  th {
-    background: ${({ theme }) => theme.bg4};
-    color: ${({ theme }) => theme.textsecondary};
+    margin: 0.3rem 0;
   }
 `;

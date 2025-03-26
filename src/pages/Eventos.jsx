@@ -5,105 +5,95 @@ import { Card } from '../components/Card';
 import * as XLSX from 'xlsx';
 import { useDropzone } from 'react-dropzone';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, onSnapshot } from 'firebase/firestore';
 import { firebaseConfig } from '../firebaseConfig'; 
-import { doc, updateDoc } from 'firebase/firestore';
-// O si ya tienes un "app" y "db" exportado, ajusta la importación según tu caso
-// import { app, db } from '../firebaseConfig';
+import { useNavigate } from 'react-router-dom'; // Para navegar al detalle
+// import { doc, updateDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
 
-// Inicializar (si no lo has hecho en otro lugar)
+// Eventos.jsx (importaciones al inicio)
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
+
+
+// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export function Eventos() {
+  const navigate = useNavigate();
 
-
-  const handleUpdateEvent = async () => {
-    if (!editEventData.id) {
-      alert("No se encontró el ID del evento a editar.");
-      return;
-    }
-  
-    try {
-      // Referencia al documento en la colección "eventos"
-      const eventRef = doc(db, 'eventos', editEventData.id);
-  
-      // Actualizar el documento en Firestore
-      await updateDoc(eventRef, {
-        nombre: editEventData.nombre,
-        descripcion: editEventData.descripcion,
-        participantes: editEventData.participantes
-      });
-  
-      alert("¡Evento actualizado correctamente!");
-      setEditModalOpen(false);
-    } catch (error) {
-      console.error("Error al actualizar el evento:", error);
-      alert("Ocurrió un error al actualizar el evento: " + error.message);
-    }
-  };
-  // Estado para el listado de eventos
+  // Estados principales
   const [eventos, setEventos] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Estado para el modal de creación
+  // Nuevo evento (creación)
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Estado para los datos de un nuevo evento
   const [eventoData, setEventoData] = useState({
     nombre: '',
     descripcion: '',
     archivo: null,
-    datos: [], // Participantes
+    datos: [], 
   });
-  
-  const handleParticipantChange = (index, field, value) => {
-    const updatedParticipants = [...editEventData.participantes];
-    updatedParticipants[index][field] = value;
-    setEditEventData({ ...editEventData, participantes: updatedParticipants });
-  };
-  
 
+  // Edición de evento
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editEventData, setEditEventData] = useState({
     id: '',
     nombre: '',
     descripcion: '',
     participantes: []
-    // Podrías poner aquí archivo: null si deseas re-subir Excel
   });
 
-  const handleOpenEditModal = (evento) => {
-    setSelectedEvent(null);
-    setEditModalOpen(true);
-    setEditEventData({
-      id: evento.id,                  // Importante para saber cuál doc actualizar
-      nombre: evento.nombre,
-      descripcion: evento.descripcion,
-      participantes: evento.participantes || []
-      // Si quieres permitir volver a subir el Excel, puedes manejarlo aquí
-    });
+  // ----------------------------------------------------------------------
+  // Eliminar un evento
+  // ----------------------------------------------------------------------
+  const handleDeleteEvent = async (eventoId) => {
+    if (!window.confirm('¿Seguro que deseas eliminar este evento y sus datos?')) return;
+
+    try {
+      // 1) Eliminar equipos e integrantes asociados
+      //    -> Buscar "equipos" donde eventoId == eventoId
+      const equiposQ = query(collection(db, 'equipos'), where('eventoId', '==', eventoId));
+      const equiposSnap = await getDocs(equiposQ);
+      for (const eqDoc of equiposSnap.docs) {
+        const equipoId = eqDoc.id;
+
+        // Eliminar sus integrantes
+        const integrantesQ = query(collection(db, 'integrantes'), where('equipoId', '==', equipoId));
+        const integSnap = await getDocs(integrantesQ);
+        for (const intDoc of integSnap.docs) {
+          await deleteDoc(doc(db, 'integrantes', intDoc.id));
+        }
+
+        // Luego eliminar el equipo
+        await deleteDoc(doc(db, 'equipos', equipoId));
+      }
+
+      // 2) Finalmente eliminar el documento del evento
+      await deleteDoc(doc(db, 'eventos', eventoId));
+
+      alert('Evento eliminado correctamente');
+    } catch (error) {
+      console.error('Error al eliminar evento:', error);
+      alert('Error al eliminar el evento: ' + error.message);
+    }
   };
 
-  const handleCloseEditModal = () => {
-    setEditModalOpen(false);
-    setEditEventData({
-      id: '',
-      nombre: '',
-      descripcion: '',
-      participantes: []
+  // ----------------------------------------------------------------------
+  // Cargar eventos en tiempo real
+  // ----------------------------------------------------------------------
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'eventos'), (snapshot) => {
+      const eventosArr = [];
+      snapshot.forEach((docSnap) => {
+        eventosArr.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setEventos(eventosArr);
     });
-  };
-  
-  
+    return () => unsub();
+  }, []);
 
-
-  // Estado para filtrar eventos
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // Estado para mostrar info detallada al hacer clic en un evento
-  const [selectedEvent, setSelectedEvent] = useState(null);
-
-  // Configuración de dropzone
+  // ----------------------------------------------------------------------
+  // Manejo de carga de archivo Excel (crear evento)
+  // ----------------------------------------------------------------------
   const { getRootProps, getInputProps } = useDropzone({
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
@@ -112,23 +102,6 @@ export function Eventos() {
     onDrop: (files) => handleFileUpload(files[0]),
   });
 
-  // ----------------------------------------------------------------------
-  // Cargar eventos en tiempo real desde Firebase
-  // ----------------------------------------------------------------------
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'eventos'), (snapshot) => {
-      const eventosArr = [];
-      snapshot.forEach((doc) => {
-        eventosArr.push({ id: doc.id, ...doc.data() });
-      });
-      setEventos(eventosArr);
-    });
-    return () => unsub();
-  }, []);
-
-  // ----------------------------------------------------------------------
-  // Manejo de carga de archivo Excel
-  // ----------------------------------------------------------------------
   const handleFileUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -151,13 +124,12 @@ export function Eventos() {
       const hasAllHeaders = requiredHeaders.every((h) =>
         headers.includes(h.toLowerCase())
       );
-
       if (!hasAllHeaders) {
         alert('El archivo no tiene las columnas requeridas.');
         return;
       }
 
-      // Procesar filas, saltando la primera (cabeceras)
+      // Procesar filas (saltando la 1ra de cabeceras)
       const datos = jsonData.slice(1).map((row) => ({
         equipo: row[0] || '',
         alumnos: row[1] || '',
@@ -177,31 +149,62 @@ export function Eventos() {
   };
 
   // ----------------------------------------------------------------------
-  // Guardar Evento en Firebase
+  // Guardar un nuevo evento en Firebase
+  //   * Crea un doc en "eventos"
+  //   * Agrupa por equipo y crea docs en "equipos" / "integrantes"
   // ----------------------------------------------------------------------
   const handleGuardar = async () => {
     if (!eventoData.nombre || !eventoData.descripcion || eventoData.datos.length === 0) {
       alert('Completa todos los campos requeridos (nombre, descripción y Excel).');
       return;
     }
-
-    const nuevoEvento = {
-      nombre: eventoData.nombre,
-      descripcion: eventoData.descripcion,
-      fecha: new Date().toLocaleDateString('es-MX'),
-      participantes: eventoData.datos, // array con los participantes del excel
-    };
-
+    
     try {
-      await addDoc(collection(db, 'eventos'), nuevoEvento);
+      // 1. Crear el documento en la colección "eventos" (sin array de participantes)
+      const newEventRef = await addDoc(collection(db, 'eventos'), {
+        nombre: eventoData.nombre,
+        descripcion: eventoData.descripcion,
+        fecha: new Date().toLocaleDateString('es-MX'),
+      });
+
+      // 2. Agrupar participantes por nombre de equipo
+      //    { "EquipoA": [ {alumnos, numControl, ...}, ... ], "EquipoB": [...] }
+      const teamsMap = {};
+      for (const row of eventoData.datos) {
+        const eqName = row.equipo.trim() || 'SIN_EQUIPO';
+        if (!teamsMap[eqName]) {
+          teamsMap[eqName] = [];
+        }
+        teamsMap[eqName].push(row);
+      }
+
+      // 3. Para cada equipo, crear un doc en "equipos", luego cada integrante en "integrantes"
+      for (const equipoName of Object.keys(teamsMap)) {
+        // Crear el equipo
+        const equipoRef = await addDoc(collection(db, 'equipos'), {
+          eventoId: newEventRef.id,
+          nombre: equipoName
+        });
+
+        // Crear los integrantes de este equipo
+        for (const participante of teamsMap[equipoName]) {
+          await addDoc(collection(db, 'integrantes'), {
+            eventoId: newEventRef.id,
+            equipoId: equipoRef.id,
+            nombre: participante.alumnos,
+            numControl: participante.numControl,
+            carrera: participante.carrera,
+            semestre: participante.semestre,
+            correo: participante.correo,
+          });
+        }
+      }
+
       // Limpiar formulario
       setModalOpen(false);
-      setEventoData({
-        nombre: '',
-        descripcion: '',
-        archivo: null,
-        datos: []
-      });
+      setEventoData({ nombre: '', descripcion: '', archivo: null, datos: [] });
+
+      alert('¡Evento creado con éxito!');
     } catch (error) {
       console.error('Error al guardar el evento en Firebase:', error);
       alert('Error al guardar el evento: ' + error.message);
@@ -209,15 +212,54 @@ export function Eventos() {
   };
 
   // ----------------------------------------------------------------------
-  // Manejar la selección de un evento (abrir modal con info)
+  // Navegar a la PÁGINA de detalle del evento
   // ----------------------------------------------------------------------
   const handleCardClick = (evento) => {
-    setSelectedEvent(evento);
+    navigate(`/evento/${evento.id}`);
   };
 
-  // Cerrar modal de detalle
-  const handleCloseDetailModal = () => {
-    setSelectedEvent(null);
+  // ----------------------------------------------------------------------
+  // Lógica para editar un evento
+  // ----------------------------------------------------------------------
+  const handleOpenEditModal = (evento) => {
+    setEditModalOpen(true);
+    setEditEventData({
+      id: evento.id,
+      nombre: evento.nombre,
+      descripcion: evento.descripcion,
+      participantes: evento.participantes || []
+    });
+  };
+
+  const handleCloseEditModal = () => {
+    setEditModalOpen(false);
+    setEditEventData({ id: '', nombre: '', descripcion: '', participantes: [] });
+  };
+
+  const handleParticipantChange = (index, field, value) => {
+    const updatedParticipants = [...editEventData.participantes];
+    updatedParticipants[index][field] = value;
+    setEditEventData({ ...editEventData, participantes: updatedParticipants });
+  };
+
+  const handleUpdateEvent = async () => {
+    if (!editEventData.id) {
+      alert("No se encontró el ID del evento a editar.");
+      return;
+    }
+    try {
+      const eventRef = doc(db, 'eventos', editEventData.id);
+      await updateDoc(eventRef, {
+        nombre: editEventData.nombre,
+        descripcion: editEventData.descripcion,
+        participantes: editEventData.participantes
+      });
+      alert("¡Evento actualizado correctamente!");
+      setEditModalOpen(false);
+    } catch (error) {
+      console.error("Error al actualizar el evento:", error);
+      alert("Ocurrió un error al actualizar el evento: " + error.message);
+    }
   };
 
   // ----------------------------------------------------------------------
@@ -229,6 +271,7 @@ export function Eventos() {
 
   return (
     <Container>
+      {/* Encabezado: campo búsqueda y botón Nuevo Evento */}
       <Header>
         <SearchInput
           placeholder="Buscar eventos..."
@@ -240,20 +283,23 @@ export function Eventos() {
         </ActionButton>
       </Header>
 
+      {/* Listado de Eventos */}
       <EventosGrid>
-        {filteredEvents.map((evento) => (
-          <Card
-            key={evento.id}
-            id={evento.id}
-            title={evento.nombre}
-            date={evento.fecha}
-            description={evento.descripcion}
-            onClick={() => handleCardClick(evento)}
-          />
+      {filteredEvents.map((evento) => (
+          <div key={evento.id}>
+            <Card
+              id={evento.id}
+              title={evento.nombre}
+              date={evento.fecha}
+              description={evento.descripcion}
+              onClick={() => handleCardClick(evento)}
+              onDelete={handleDeleteEvent}
+            />
+          </div>
         ))}
       </EventosGrid>
 
-      {/* MODAL CREAR NUEVO EVENTO */}
+      {/* MODAL: CREAR NUEVO EVENTO */}
       {modalOpen && (
         <ModalBackdrop>
           <Modal>
@@ -320,18 +366,14 @@ export function Eventos() {
             )}
 
             <ModalActions>
-              <SecondaryButton onClick={() => setModalOpen(false)}>
-                Cancelar
-              </SecondaryButton>
-              <PrimaryButton onClick={handleGuardar}>
-                Guardar Evento
-              </PrimaryButton>
+              <SecondaryButton onClick={() => setModalOpen(false)}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={handleGuardar}>Guardar Evento</PrimaryButton>
             </ModalActions>
           </Modal>
         </ModalBackdrop>
       )}
 
-
+      {/* MODAL: EDITAR EVENTO */}
       {editModalOpen && (
         <ModalBackdrop>
           <Modal>
@@ -344,9 +386,7 @@ export function Eventos() {
               <label>Nombre del Evento</label>
               <Input
                 value={editEventData.nombre}
-                onChange={(e) =>
-                  setEditEventData({ ...editEventData, nombre: e.target.value })
-                }
+                onChange={(e) => setEditEventData({ ...editEventData, nombre: e.target.value })}
               />
             </FormGroup>
 
@@ -361,7 +401,7 @@ export function Eventos() {
               />
             </FormGroup>
 
-            {/* Sección para editar participantes */}
+            {/* Edición de participantes (obsoleto si ya no usas el array en el doc) */}
             {editEventData.participantes && editEventData.participantes.length > 0 && (
               <>
                 <h3>Editar Participantes</h3>
@@ -383,37 +423,49 @@ export function Eventos() {
                           <td>
                             <MiniInput
                               value={p.equipo}
-                              onChange={(e) => handleParticipantChange(i, 'equipo', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'equipo', e.target.value)
+                              }
                             />
                           </td>
                           <td>
                             <MiniInput
                               value={p.alumnos}
-                              onChange={(e) => handleParticipantChange(i, 'alumnos', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'alumnos', e.target.value)
+                              }
                             />
                           </td>
                           <td>
                             <MiniInput
                               value={p.numControl}
-                              onChange={(e) => handleParticipantChange(i, 'numControl', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'numControl', e.target.value)
+                              }
                             />
                           </td>
                           <td>
                             <MiniInput
                               value={p.carrera}
-                              onChange={(e) => handleParticipantChange(i, 'carrera', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'carrera', e.target.value)
+                              }
                             />
                           </td>
                           <td>
                             <MiniInput
                               value={p.semestre}
-                              onChange={(e) => handleParticipantChange(i, 'semestre', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'semestre', e.target.value)
+                              }
                             />
                           </td>
                           <td>
                             <MiniInput
                               value={p.correo}
-                              onChange={(e) => handleParticipantChange(i, 'correo', e.target.value)}
+                              onChange={(e) =>
+                                handleParticipantChange(i, 'correo', e.target.value)
+                              }
                             />
                           </td>
                         </tr>
@@ -431,117 +483,12 @@ export function Eventos() {
           </Modal>
         </ModalBackdrop>
       )}
-
-      {/* MODAL DETALLE DE UN EVENTO AL HACER CLIC EN LA CARD */}
-      {selectedEvent && (
-        <ModalBackdrop>
-          <Modal>
-            <ModalHeader>
-              <h2>Detalles del Evento</h2>
-              <CloseButton onClick={handleCloseDetailModal}>×</CloseButton>
-            </ModalHeader>
-
-            <DetailsContainer>
-              <p><strong>Nombre:</strong> {selectedEvent.nombre}</p>
-              <p><strong>Descripción:</strong> {selectedEvent.descripcion}</p>
-              <p><strong>Fecha de Creación:</strong> {selectedEvent.fecha}</p>
-            </DetailsContainer>
-
-            {selectedEvent.participantes && selectedEvent.participantes.length > 0 && (
-              <>
-                <h3>Participantes</h3>
-                <TablaContainer>
-                  <Tabla>
-                    <thead>
-                      <tr>
-                        <th>Equipo</th>
-                        <th>Alumnos</th>
-                        <th>No. Control</th>
-                        <th>Carrera</th>
-                        <th>Semestre</th>
-                        <th>Correo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedEvent.participantes.map((p, i) => (
-                        <tr key={i}>
-                          <td>{p.equipo}</td>
-                          <td>{p.alumnos}</td>
-                          <td>{p.numControl}</td>
-                          <td>{p.carrera}</td>
-                          <td>{p.semestre}</td>
-                          <td>{p.correo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Tabla>
-                </TablaContainer>
-              </>
-            )}
-          </Modal>
-        </ModalBackdrop>
-      )}
-      {selectedEvent && (
-        <ModalBackdrop>
-          <Modal>
-            <ModalHeader>
-              <h2>Detalles del Evento</h2>
-              <CloseButton onClick={handleCloseDetailModal}>×</CloseButton>
-            </ModalHeader>
-
-            <DetailsContainer>
-              <p><strong>Nombre:</strong> {selectedEvent.nombre}</p>
-              <p><strong>Descripción:</strong> {selectedEvent.descripcion}</p>
-              <p><strong>Fecha de Creación:</strong> {selectedEvent.fecha}</p>
-            </DetailsContainer>
-
-            {selectedEvent.participantes && selectedEvent.participantes.length > 0 && (
-              <>
-                <h3>Participantes</h3>
-                <TablaContainer>
-                  <Tabla>
-                    <thead>
-                      <tr>
-                        <th>Equipo</th>
-                        <th>Alumnos</th>
-                        <th>No. Control</th>
-                        <th>Carrera</th>
-                        <th>Semestre</th>
-                        <th>Correo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedEvent.participantes.map((p, i) => (
-                        <tr key={i}>
-                          <td>{p.equipo}</td>
-                          <td>{p.alumnos}</td>
-                          <td>{p.numControl}</td>
-                          <td>{p.carrera}</td>
-                          <td>{p.semestre}</td>
-                          <td>{p.correo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Tabla>
-                </TablaContainer>
-              </>
-            )}
-
-            <ModalActions>
-              <SecondaryButton onClick={handleCloseDetailModal}>Cerrar</SecondaryButton>
-              <PrimaryButton onClick={() => handleOpenEditModal(selectedEvent)}>
-                Editar
-              </PrimaryButton>
-            </ModalActions>
-          </Modal>
-        </ModalBackdrop>
-      )}
     </Container>
   );
 }
 
 // ----------------------------------------------------------------------
-// Estilos
+// Estilos (sin cambios relevantes, salvo handleGuardar)
 // ----------------------------------------------------------------------
 const Container = styled.div`
   padding: 20px 30px;
@@ -679,13 +626,15 @@ const TablaContainer = styled.div`
 const Tabla = styled.table`
   width: 100%;
   border-collapse: collapse;
-  th, td, {
+  th, td {
     padding: 12px;
     text-align: left;
     border-bottom: 1px solid ${({ theme }) => theme.border || '#ccc'};
+    font-size: ${({ theme }) => theme.fontsm || '0.875rem'};
   }
   th {
-    background-color: ${({ theme }) => theme.bg2};
+    background-color: ${({ theme }) => theme.bg4 || '#ccc'};
+    color: ${({ theme }) => theme.textsecondary || '#fff'};
   }
 `;
 
@@ -714,13 +663,6 @@ const SecondaryButton = styled.button`
   cursor: pointer;
 `;
 
-const DetailsContainer = styled.div`
-  p {
-    margin: 0.5rem 0;
-  }
-`;
-
-// MiniInput para edición de participantes en la tabla
 const MiniInput = styled.input`
   width: 100%;
   padding: 5px;
@@ -730,9 +672,21 @@ const MiniInput = styled.input`
   background: ${({ theme }) => theme.bg2 || '#f9f9f9'};
   color: ${({ theme }) => theme.text || '#000'};
   outline: none;
-
   &:focus {
     border-color: ${({ theme }) => theme.primary || '#347ba7'};
   }
 `;
 
+const DeleteButton = styled.button`
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #db3a3a;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  &:hover {
+    opacity: 0.8;
+  }
+`;

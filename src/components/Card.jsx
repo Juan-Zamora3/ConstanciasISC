@@ -4,7 +4,7 @@ import React from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 
-export const Card = ({ id, title, date, description, onClick }) => {
+export const Card = ({ id, title, date, description, onClick, onDelete }) => {
 
     const navigate = useNavigate();
 
@@ -14,8 +14,16 @@ export const Card = ({ id, title, date, description, onClick }) => {
 
     return (
         <StyledWrapper onClick={handleClick}>
+
             <div className="card">
+            <DeleteButton onClick={(e) => { 
+                  e.stopPropagation(); // Evita que el click en el botón dispare el onClick del card
+                  onDelete(id); 
+                  }}>
+                    ×
+                </DeleteButton>
                 <h3 className="card__title">{title}</h3>
+
                 <p className="card__content">{description}</p>
                 <div className="card__date">{date}</div>
                 <div className="card__arrow">
@@ -27,6 +35,22 @@ export const Card = ({ id, title, date, description, onClick }) => {
         </StyledWrapper>
     );
 }
+
+const DeleteButton = styled.button`
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: ${({ theme }) => theme.text}; /* Color del texto según el theme */
+  font-size: 25px;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color:rgb(170, 42, 72) /* Color de hover según el theme */
+  }
+`;
 
 
 const StyledWrapper = styled.div`
