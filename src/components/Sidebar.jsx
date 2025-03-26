@@ -93,16 +93,6 @@ const linksArray = [
     to: "/eventos",
   },
   {
-    label: "Equipos",
-    icon: <MdGroups />,
-    to: "/equipos",
-  },
-  {
-    label: "Integrantes",
-    icon: <FaUser />,
-    to: "/integrantes",
-  },
-  {
     label: "Constancias",
     icon: <IoDocumentTextOutline />,
     to: "/constancias",
