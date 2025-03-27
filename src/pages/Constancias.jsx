@@ -145,6 +145,8 @@ export function Constancias() {
   // + si “enviar por correo” está marcado, enviar correos también
   // ------------------------------------------------------------------
   const handleGenerarConstancias = async () => {
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
     if (!plantillaPDF) {
       alert('Por favor sube una plantilla PDF primero');
       return;
@@ -208,7 +210,7 @@ export function Constancias() {
   };
 
   // ------------------------------------------------------------------
-  // Genera un PDF para un participante (código tal como en “pre”)
+  // Genera un PDF para un participante (código tal como en “pre”
   // ------------------------------------------------------------------
   const generarPDFpara = async (participante, pdfTemplate) => {
     try {
@@ -217,16 +219,19 @@ export function Constancias() {
       pdfDoc.registerFontkit(fontkit);
   
       // Configuración de tamaños de fuente (ajustar según necesidad)
-      const TAMANO_NOMBRE = 36;
-      const TAMANO_EQUIPO = 14;
+      const TAMANO_NOMBRE = 26;
+      const TAMANO_EQUIPO = 18;
       const ESPACIADO_VERTICAL = 60; // Espacio entre nombre y equipo
   
       // Cargar fuente (usar misma fuente que la plantilla)
       let customFont;
       try {
-        customFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+          const fontBytes = await fetch('/fonts/Roboto-Bold.ttf').then(res => res.arrayBuffer());
+          customFont = await pdfDoc.embedFont(fontBytes);
+          console.log('Fuente personalizada cargada exitosamente');
       } catch (error) {
-        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+          console.error('Error al cargar la fuente personalizada, usando Helvetica por defecto:', error);
+          customFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       }
   
       // Manejo de campos de formulario
@@ -237,16 +242,20 @@ export function Constancias() {
         // Si hay campos de formulario
         fields.forEach(field => {
           const fieldName = field.getName().toLowerCase();
-          
+  
           // Campo para nombre con formato específico
           if (fieldName.includes('nombre')) {
             field.setText(`A\n${nombre.toUpperCase()}`);
+            field.setAlignment(1);
+            field.setFontSize(TAMANO_NOMBRE);
             field.updateAppearances(customFont);
           }
   
           // Campo para equipo con texto descriptivo
           if (fieldName.includes('equipo')) {
-            field.setText(`Equipo: ${teamName}\nCategoría HACKATEC etapa local`);
+            field.setText(`Equipo: ${teamName}`);
+            field.setAlignment(1);
+            field.setFontSize(TAMANO_EQUIPO);
             field.updateAppearances(customFont);
           }
         });
