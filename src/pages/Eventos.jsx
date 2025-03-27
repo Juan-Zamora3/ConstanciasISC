@@ -42,6 +42,44 @@ export function Eventos() {
     participantes: []
   });
 
+  // Agregar un integrante manualmente
+  // Estados para agregar integrantes manualmente
+  const [manualIntegrantes, setManualIntegrantes] = useState([]);
+  const [newIntegrante, setNewIntegrante] = useState({
+    equipo: '',
+    alumnos: '',
+    numControl: '',
+    carrera: '',
+    semestre: '',
+    correo: '',
+  });
+  // Agregar un integrante manualmente
+  const handleAddManualIntegrante = () => {
+    if (!newIntegrante.alumnos || !newIntegrante.equipo) {
+      alert('Completa el nombre del integrante y el equipo');
+      return;
+    }
+    setManualIntegrantes([...manualIntegrantes, newIntegrante]);
+    setNewIntegrante({
+      equipo: '',
+      alumnos: '',
+      numControl: '',
+      carrera: '',
+      semestre: '',
+      correo: '',
+    });
+  };
+
+
+  // Eliminar un integrante manual
+  const handleDeleteManualIntegrante = (index) => {
+    const updatedIntegrantes = [...manualIntegrantes];
+    updatedIntegrantes.splice(index, 1);
+    setManualIntegrantes(updatedIntegrantes);
+  };
+
+
+
   // ----------------------------------------------------------------------
   // Eliminar un evento
   // ----------------------------------------------------------------------
@@ -153,63 +191,76 @@ export function Eventos() {
   //   * Crea un doc en "eventos"
   //   * Agrupa por equipo y crea docs en "equipos" / "integrantes"
   // ----------------------------------------------------------------------
-  const handleGuardar = async () => {
-    if (!eventoData.nombre || !eventoData.descripcion || eventoData.datos.length === 0) {
-      alert('Completa todos los campos requeridos (nombre, descripción y Excel).');
-      return;
+// Guardar un nuevo evento en Firebase
+// Guardar un nuevo evento en Firebase
+const handleGuardar = async () => {
+  if (!eventoData.nombre || !eventoData.descripcion) {
+    alert('Completa todos los campos requeridos (nombre y descripción).');
+    return;
+  }
+
+  try {
+    // 1. Crear el documento en la colección "eventos"
+    const newEventRef = await addDoc(collection(db, 'eventos'), {
+      nombre: eventoData.nombre,
+      descripcion: eventoData.descripcion,
+      fecha: new Date().toLocaleDateString('es-MX'),
+    });
+
+    // 2. Guardar los integrantes manuales
+    for (const integrante of manualIntegrantes) {
+      await addDoc(collection(db, 'integrantes'), {
+        eventoId: newEventRef.id,
+        equipoId: '', // Puedes asignar un equipo si lo tienes definido
+        nombre: integrante.alumnos,
+        numControl: integrante.numControl,
+        carrera: integrante.carrera,
+        semestre: integrante.semestre,
+        correo: integrante.correo,
+      });
     }
-    
-    try {
-      // 1. Crear el documento en la colección "eventos" (sin array de participantes)
-      const newEventRef = await addDoc(collection(db, 'eventos'), {
-        nombre: eventoData.nombre,
-        descripcion: eventoData.descripcion,
-        fecha: new Date().toLocaleDateString('es-MX'),
+
+    // 3. Procesar los integrantes importados desde el archivo Excel
+    const teamsMap = {};
+    for (const row of eventoData.datos) {
+      const eqName = row.equipo.trim() || 'SIN_EQUIPO';
+      if (!teamsMap[eqName]) {
+        teamsMap[eqName] = [];
+      }
+      teamsMap[eqName].push(row);
+    }
+
+    for (const equipoName of Object.keys(teamsMap)) {
+      const equipoRef = await addDoc(collection(db, 'equipos'), {
+        eventoId: newEventRef.id,
+        nombre: equipoName,
       });
 
-      // 2. Agrupar participantes por nombre de equipo
-      //    { "EquipoA": [ {alumnos, numControl, ...}, ... ], "EquipoB": [...] }
-      const teamsMap = {};
-      for (const row of eventoData.datos) {
-        const eqName = row.equipo.trim() || 'SIN_EQUIPO';
-        if (!teamsMap[eqName]) {
-          teamsMap[eqName] = [];
-        }
-        teamsMap[eqName].push(row);
-      }
-
-      // 3. Para cada equipo, crear un doc en "equipos", luego cada integrante en "integrantes"
-      for (const equipoName of Object.keys(teamsMap)) {
-        // Crear el equipo
-        const equipoRef = await addDoc(collection(db, 'equipos'), {
+      for (const participante of teamsMap[equipoName]) {
+        await addDoc(collection(db, 'integrantes'), {
           eventoId: newEventRef.id,
-          nombre: equipoName
+          equipoId: equipoRef.id,
+          nombre: participante.alumnos,
+          numControl: participante.numControl,
+          carrera: participante.carrera,
+          semestre: participante.semestre,
+          correo: participante.correo,
         });
-
-        // Crear los integrantes de este equipo
-        for (const participante of teamsMap[equipoName]) {
-          await addDoc(collection(db, 'integrantes'), {
-            eventoId: newEventRef.id,
-            equipoId: equipoRef.id,
-            nombre: participante.alumnos,
-            numControl: participante.numControl,
-            carrera: participante.carrera,
-            semestre: participante.semestre,
-            correo: participante.correo,
-          });
-        }
       }
-
-      // Limpiar formulario
-      setModalOpen(false);
-      setEventoData({ nombre: '', descripcion: '', archivo: null, datos: [] });
-
-      alert('¡Evento creado con éxito!');
-    } catch (error) {
-      console.error('Error al guardar el evento en Firebase:', error);
-      alert('Error al guardar el evento: ' + error.message);
     }
-  };
+
+    // Limpiar formulario y estado
+    setModalOpen(false);
+    setEventoData({ nombre: '', descripcion: '', archivo: null, datos: [] });
+    setManualIntegrantes([]); // Limpiar lista de integrantes manuales
+
+    alert('¡Evento creado con éxito!');
+  } catch (error) {
+    console.error('Error al guardar el evento en Firebase:', error);
+    alert('Error al guardar el evento: ' + error.message);
+  }
+};
+
 
   // ----------------------------------------------------------------------
   // Navegar a la PÁGINA de detalle del evento
@@ -326,6 +377,81 @@ export function Eventos() {
                 placeholder="Ej: Competencia de programación para alumnos de distintas carreras"
               />
             </FormGroup>
+            {/* Agregar Integrante Manualmente */}
+            <FormGroupRow>
+              <Column>
+                <label>Equipo</label>
+                <Input
+                  value={newIntegrante.equipo}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, equipo: e.target.value })}
+                />
+                <label>Nombre</label>
+                <Input
+                  value={newIntegrante.alumnos}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, alumnos: e.target.value })}
+                />
+                <label>No. Control</label>
+                <Input
+                  value={newIntegrante.numControl}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, numControl: e.target.value })}
+                />
+              </Column>
+
+              <Column>
+                <label>Carrera</label>
+                <Input
+                  value={newIntegrante.carrera}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, carrera: e.target.value })}
+                />
+                <label>Semestre</label>
+                <Input
+                  value={newIntegrante.semestre}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, semestre: e.target.value })}
+                />
+                <label>Correo</label>
+                <Input
+                  value={newIntegrante.correo}
+                  onChange={(e) => setNewIntegrante({ ...newIntegrante, correo: e.target.value })}
+                />
+              </Column>
+            </FormGroupRow>
+
+            <PrimaryButton onClick={handleAddManualIntegrante}>Agregar Integrante</PrimaryButton>
+
+
+            {/* Tabla de Integrantes Manuales */}
+            {manualIntegrantes.length > 0 && (
+              <TableContainer>
+                <StyledTable>
+                  <thead>
+                    <tr>
+                      <th>Equipo</th>
+                      <th>Nombre</th>
+                      <th>No. Control</th>
+                      <th>Carrera</th>
+                      <th>Semestre</th>
+                      <th>Correo</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manualIntegrantes.map((item, index) => (
+                      <tr key={index}>
+                        <td>{item.equipo}</td>
+                        <td>{item.alumnos}</td>
+                        <td>{item.numControl}</td>
+                        <td>{item.carrera}</td>
+                        <td>{item.semestre}</td>
+                        <td>{item.correo}</td>
+                        <td>
+                          <ActionButton onClick={() => handleDeleteManualIntegrante(index)}>Eliminar</ActionButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </StyledTable>
+              </TableContainer>
+            )}
 
             <FormGroup>
               <label>Importar participantes desde Excel</label>
@@ -498,6 +624,36 @@ const Container = styled.div`
   overflow-y: auto;
 `;
 
+const FormGroupRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+`;
+
+const Column = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 48%; /* Ajuste para que ocupen la mitad del espacio */
+`;
+
+
+const StyledTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+
+  th, td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid ${({ theme }) => theme.border || '#ddd'};
+  }
+
+  th {
+    background-color: ${({ theme }) => theme.bg4};
+    color: ${({ theme }) => theme.textsecondary};
+  }
+`;
+
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
@@ -515,6 +671,16 @@ const SearchInput = styled.input`
   background: ${({ theme }) => theme.bg || '#fff'};
   color: ${({ theme }) => theme.text || '#000'};
 `;
+
+const TableContainer = styled.div`
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
+  border-radius: 8px;
+  margin-top: 20px;
+  min-height: 80px;
+`;
+
 
 const ActionButton = styled.button`
   padding: 10px 25px;

@@ -226,7 +226,7 @@ export function Constancias() {
       // Cargar fuente (usar misma fuente que la plantilla)
       let customFont;
       try {
-          const fontBytes = await fetch('/fonts/Roboto-Bold.ttf').then(res => res.arrayBuffer());
+          const fontBytes = await fetch('/fonts/GolosText-VariableFont_wght.ttf').then(res => res.arrayBuffer());
           customFont = await pdfDoc.embedFont(fontBytes);
           console.log('Fuente personalizada cargada exitosamente');
       } catch (error) {
@@ -245,7 +245,7 @@ export function Constancias() {
   
           // Campo para nombre con formato específico
           if (fieldName.includes('nombre')) {
-            field.setText(`A\n${nombre.toUpperCase()}`);
+            field.setText(`${nombre.toUpperCase()}`);
             field.setAlignment(1);
             field.setFontSize(TAMANO_NOMBRE);
             field.updateAppearances(customFont);
@@ -253,7 +253,7 @@ export function Constancias() {
   
           // Campo para equipo con texto descriptivo
           if (fieldName.includes('equipo')) {
-            field.setText(`Equipo: ${teamName}`);
+            field.setText(`${teamName}`);
             field.setAlignment(1);
             field.setFontSize(TAMANO_EQUIPO);
             field.updateAppearances(customFont);
@@ -266,15 +266,6 @@ export function Constancias() {
         const { width, height } = page.getSize();
   
         // Texto "A" como prefijo
-        const prefijo = "A";
-        const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
-        page.drawText(prefijo, {
-          x: (width - prefijoWidth) / 2,
-          y: height / 2 + 40,
-          font: customFont,
-          size: TAMANO_NOMBRE,
-          color: rgb(0, 0, 0),
-        });
   
         // Nombre del participante
         const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
@@ -287,7 +278,7 @@ export function Constancias() {
         });
   
         // Nombre del equipo
-        const equipoTexto = `Equipo: ${teamName}`;
+        const equipoTexto = `${teamName}`;
         const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
         page.drawText(equipoTexto, {
           x: (width - equipoWidth) / 2,
