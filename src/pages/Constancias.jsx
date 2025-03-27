@@ -219,7 +219,7 @@ export function Constancias() {
       pdfDoc.registerFontkit(fontkit);
   
       // Configuración de tamaños de fuente (ajustar según necesidad)
-      const TAMANO_NOMBRE = 26;
+      const TAMANO_NOMBRE = 27;
       const TAMANO_EQUIPO = 18;
       const ESPACIADO_VERTICAL = 60; // Espacio entre nombre y equipo
   
