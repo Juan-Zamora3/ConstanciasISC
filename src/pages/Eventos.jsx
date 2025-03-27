@@ -42,41 +42,6 @@ export function Eventos() {
     participantes: []
   });
 
-  // Agregar un integrante manualmente
-  // Estados para agregar integrantes manualmente
-  const [manualIntegrantes, setManualIntegrantes] = useState([]);
-  const [newIntegrante, setNewIntegrante] = useState({
-    equipo: '',
-    alumnos: '',
-    numControl: '',
-    carrera: '',
-    semestre: '',
-    correo: '',
-  });
-  // Agregar un integrante manualmente
-  const handleAddManualIntegrante = () => {
-    if (!newIntegrante.alumnos || !newIntegrante.equipo) {
-      alert('Completa el nombre del integrante y el equipo');
-      return;
-    }
-    setManualIntegrantes([...manualIntegrantes, newIntegrante]);
-    setNewIntegrante({
-      equipo: '',
-      alumnos: '',
-      numControl: '',
-      carrera: '',
-      semestre: '',
-      correo: '',
-    });
-  };
-
-
-  // Eliminar un integrante manual
-  const handleDeleteManualIntegrante = (index) => {
-    const updatedIntegrantes = [...manualIntegrantes];
-    updatedIntegrantes.splice(index, 1);
-    setManualIntegrantes(updatedIntegrantes);
-  };
 
 
 
@@ -193,34 +158,25 @@ export function Eventos() {
   // ----------------------------------------------------------------------
 // Guardar un nuevo evento en Firebase
 // Guardar un nuevo evento en Firebase
+// Guardar un nuevo evento en Firebase
 const handleGuardar = async () => {
-  if (!eventoData.nombre || !eventoData.descripcion) {
-    alert('Completa todos los campos requeridos (nombre y descripción).');
+  if (!eventoData.nombre) {
+    alert('El nombre del evento es obligatorio.');
     return;
   }
 
   try {
+    // Si la descripción está vacía, asignar el texto "Agregando evento en blanco"
+    const descripcion = eventoData.descripcion.trim() || 'Agregando evento en blanco';
+
     // 1. Crear el documento en la colección "eventos"
     const newEventRef = await addDoc(collection(db, 'eventos'), {
       nombre: eventoData.nombre,
-      descripcion: eventoData.descripcion,
+      descripcion: descripcion,
       fecha: new Date().toLocaleDateString('es-MX'),
     });
 
-    // 2. Guardar los integrantes manuales
-    for (const integrante of manualIntegrantes) {
-      await addDoc(collection(db, 'integrantes'), {
-        eventoId: newEventRef.id,
-        equipoId: '', // Puedes asignar un equipo si lo tienes definido
-        nombre: integrante.alumnos,
-        numControl: integrante.numControl,
-        carrera: integrante.carrera,
-        semestre: integrante.semestre,
-        correo: integrante.correo,
-      });
-    }
-
-    // 3. Procesar los integrantes importados desde el archivo Excel
+    // 2. Procesar los integrantes importados desde el archivo Excel
     const teamsMap = {};
     for (const row of eventoData.datos) {
       const eqName = row.equipo.trim() || 'SIN_EQUIPO';
@@ -252,7 +208,6 @@ const handleGuardar = async () => {
     // Limpiar formulario y estado
     setModalOpen(false);
     setEventoData({ nombre: '', descripcion: '', archivo: null, datos: [] });
-    setManualIntegrantes([]); // Limpiar lista de integrantes manuales
 
     alert('¡Evento creado con éxito!');
   } catch (error) {
@@ -260,6 +215,7 @@ const handleGuardar = async () => {
     alert('Error al guardar el evento: ' + error.message);
   }
 };
+
 
 
   // ----------------------------------------------------------------------
@@ -378,80 +334,7 @@ const handleGuardar = async () => {
               />
             </FormGroup>
             {/* Agregar Integrante Manualmente */}
-            <FormGroupRow>
-              <Column>
-                <label>Equipo</label>
-                <Input
-                  value={newIntegrante.equipo}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, equipo: e.target.value })}
-                />
-                <label>Nombre</label>
-                <Input
-                  value={newIntegrante.alumnos}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, alumnos: e.target.value })}
-                />
-                <label>No. Control</label>
-                <Input
-                  value={newIntegrante.numControl}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, numControl: e.target.value })}
-                />
-              </Column>
 
-              <Column>
-                <label>Carrera</label>
-                <Input
-                  value={newIntegrante.carrera}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, carrera: e.target.value })}
-                />
-                <label>Semestre</label>
-                <Input
-                  value={newIntegrante.semestre}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, semestre: e.target.value })}
-                />
-                <label>Correo</label>
-                <Input
-                  value={newIntegrante.correo}
-                  onChange={(e) => setNewIntegrante({ ...newIntegrante, correo: e.target.value })}
-                />
-              </Column>
-            </FormGroupRow>
-
-            <PrimaryButton onClick={handleAddManualIntegrante}>Agregar Integrante</PrimaryButton>
-
-
-            {/* Tabla de Integrantes Manuales */}
-            {manualIntegrantes.length > 0 && (
-              <TableContainer>
-                <StyledTable>
-                  <thead>
-                    <tr>
-                      <th>Equipo</th>
-                      <th>Nombre</th>
-                      <th>No. Control</th>
-                      <th>Carrera</th>
-                      <th>Semestre</th>
-                      <th>Correo</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {manualIntegrantes.map((item, index) => (
-                      <tr key={index}>
-                        <td>{item.equipo}</td>
-                        <td>{item.alumnos}</td>
-                        <td>{item.numControl}</td>
-                        <td>{item.carrera}</td>
-                        <td>{item.semestre}</td>
-                        <td>{item.correo}</td>
-                        <td>
-                          <ActionButton onClick={() => handleDeleteManualIntegrante(index)}>Eliminar</ActionButton>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </StyledTable>
-              </TableContainer>
-            )}
 
             <FormGroup>
               <label>Importar participantes desde Excel</label>
@@ -624,36 +507,6 @@ const Container = styled.div`
   overflow-y: auto;
 `;
 
-const FormGroupRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-`;
-
-const Column = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 48%; /* Ajuste para que ocupen la mitad del espacio */
-`;
-
-
-const StyledTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th, td {
-    padding: 8px;
-    text-align: left;
-    border-bottom: 1px solid ${({ theme }) => theme.border || '#ddd'};
-  }
-
-  th {
-    background-color: ${({ theme }) => theme.bg4};
-    color: ${({ theme }) => theme.textsecondary};
-  }
-`;
-
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
@@ -678,7 +531,7 @@ const TableContainer = styled.div`
   border: 1px solid ${({ theme }) => theme.border || '#ccc'};
   border-radius: 8px;
   margin-top: 20px;
-  min-height: 80px;
+  min-height: 200px;
 `;
 
 
