@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument,  StandardFonts } from 'pdf-lib';
+import { rgb, cmyk, grayscale } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -219,19 +220,19 @@ export function Constancias() {
       pdfDoc.registerFontkit(fontkit);
   
       // Configuración de tamaños de fuente (ajustar según necesidad)
-      const TAMANO_NOMBRE = 27;
+      const TAMANO_NOMBRE = 20;
       const TAMANO_EQUIPO = 18;
       const ESPACIADO_VERTICAL = 60; // Espacio entre nombre y equipo
   
       // Cargar fuente (usar misma fuente que la plantilla)
       let customFont;
       try {
-          const fontBytes = await fetch('/fonts/GolosText-VariableFont_wght.ttf').then(res => res.arrayBuffer());
+          const fontBytes = await fetch('/fonts/Patria_Regular.otf').then(res => res.arrayBuffer());
           customFont = await pdfDoc.embedFont(fontBytes);
           console.log('Fuente personalizada cargada exitosamente');
       } catch (error) {
           console.error('Error al cargar la fuente personalizada, usando Helvetica por defecto:', error);
-          customFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+          
       }
   
       // Manejo de campos de formulario
@@ -239,23 +240,22 @@ export function Constancias() {
       const fields = form.getFields();
   
       if (fields.length > 0) {
-        // Si hay campos de formulario
         fields.forEach(field => {
           const fieldName = field.getName().toLowerCase();
-  
-          // Campo para nombre con formato específico
+      
           if (fieldName.includes('nombre')) {
             field.setText(`${nombre.toUpperCase()}`);
             field.setAlignment(1);
             field.setFontSize(TAMANO_NOMBRE);
+            // Set color through defaultAppearanc   
             field.updateAppearances(customFont);
           }
-  
-          // Campo para equipo con texto descriptivo
+      
           if (fieldName.includes('equipo')) {
             field.setText(`${teamName}`);
             field.setAlignment(1);
-            field.setFontSize(TAMANO_EQUIPO);
+            field.setFontSize(TAMANO_EQUIPO); 
+            // Se.t color through defaultAppearance  
             field.updateAppearances(customFont);
           }
         });
@@ -264,8 +264,16 @@ export function Constancias() {
         // Dibujo directo en el PDF
         const page = pdfDoc.getPages()[0];
         const { width, height } = page.getSize();
-  
-        // Texto "A" como prefijo
+        // Texto "A" como prefijo1
+        const prefijo = "A";
+        const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
+        page.drawText(prefijo, {
+          x: (width - prefijoWidth) / 2,
+          y: height / 2 + 40,
+          font: customFont,
+          size: TAMANO_NOMBRE,
+          color: rgb(73, 73, 73),
+        });
   
         // Nombre del participante
         const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
@@ -274,18 +282,18 @@ export function Constancias() {
           y: height / 2,
           font: customFont,
           size: TAMANO_NOMBRE,
-          color: rgb(0, 0, 0),
+          color: rgb(73, 73, 73),
         });
   
         // Nombre del equipo
-        const equipoTexto = `${teamName}`;
+        const equipoTexto = `Equipo: ${teamName}`;
         const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
         page.drawText(equipoTexto, {
           x: (width - equipoWidth) / 2,
           y: (height / 2) - ESPACIADO_VERTICAL,
           font: customFont,
           size: TAMANO_EQUIPO,
-          color: rgb(0, 0, 0),
+          color: rgb(65, 65, 65),
         });
       }
   
