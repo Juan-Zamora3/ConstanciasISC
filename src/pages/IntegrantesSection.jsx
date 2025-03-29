@@ -329,7 +329,6 @@ export function IntegrantesSection({ eventoId }) {
 
 // -------------------- Estilos (viejo formato) --------------------
 const Container = styled.div`
-  padding: 1rem;
 `;
 
 const HeaderBar = styled.div`

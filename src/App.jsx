@@ -1,35 +1,41 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
-import styled from "styled-components";
+import styled, { createGlobalStyle } from "styled-components";
 import { Sidebar } from "./components/Sidebar";
 import { Light, Dark } from "./styles/Themes";
 import { ThemeProvider } from "styled-components";
-import { Singup}  from "./pages/singup"; // Importación corregida
-import { MyRoutes } from "./routers/routes"; // Asegurar que existe este archivo
+import { Singup } from "./pages/singup";
+import { MyRoutes } from "./routers/routes";
 
 export const ThemeContext = React.createContext(null);
+
+const GlobalStyle = createGlobalStyle`
+  body {
+    --scroll-thumb-color: ${({ theme }) => theme.scrollThumb};
+    --scroll-thumb-hover-color: ${({ theme }) => theme.scrollThumbHover};
+  }
+`;
 
 function App() {
   const [theme, setTheme] = useState("light");
   const themeStyle = theme === "light" ? Light : Dark;
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
-  // Estado para verificar autenticación (tomado de localStorage)
+
   const [isAuthenticated, setIsAuthenticated] = useState(
     localStorage.getItem("auth") === "true"
   );
-  
+
   const handleLogout = () => {
-    localStorage.removeItem("auth"); // Elimina la sesión guardada
-    setIsAuthenticated(false); // Cambia el estado de autenticación
+    localStorage.removeItem("auth");
+    setIsAuthenticated(false);
   };
 
   return (
     <ThemeContext.Provider value={{ setTheme, theme }}>
       <ThemeProvider theme={themeStyle}>
+        <GlobalStyle />
         <BrowserRouter>
           <Routes>
-            {/* Si no está autenticado, mostrar pantalla de login */}
             {!isAuthenticated ? (
               <>
                 <Route path="/singup" element={<Singup setIsAuthenticated={setIsAuthenticated} />} />
@@ -55,7 +61,6 @@ function App() {
   );
 }
 
-// Estilos del contenedor
 const Container = styled.div`
   display: grid;
   grid-template-columns: 90px auto;
@@ -66,6 +71,5 @@ const Container = styled.div`
   }
   color: ${({ theme }) => theme.text};
 `;
-
 
 export default App;

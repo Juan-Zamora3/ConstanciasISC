@@ -54,12 +54,16 @@ export function Constancias() {
   // Luego generar constancias de forma automática si ya hay plantilla.
   // ------------------------------------------------------------------
   useEffect(() => {
+    let isMounted = true;
     if (!selectedEvent) {
       setTeams([]);
       return;
     }
     const loadTeams = async () => {
       try {
+        setTeams([]);
+        setCheckedTeams({});
+        setPdfPreviews([]);
         const q = query(collection(db, 'equipos'), where('eventoId', '==', selectedEvent));
         const snapTeams = await getDocs(q);
         const promises = snapTeams.docs.map(async (teamDoc) => {
@@ -85,11 +89,20 @@ export function Constancias() {
         if (plantillaPDF) {
           await handleGenerarConstancias();
         }
+        if (isMounted) {
+          setTeams(allTeams);
+          const initialChecks = {};
+          allTeams.forEach(t => { initialChecks[t.id] = true; });
+          setCheckedTeams(initialChecks);
+        }
       } catch (error) {
         console.error('Error cargando equipos:', error);
       }
     };
     loadTeams();
+    return () => {
+      isMounted = false;
+    };
   }, [selectedEvent]);
 
   // ------------------------------------------------------------------
@@ -213,58 +226,89 @@ export function Constancias() {
   // ------------------------------------------------------------------
   // Genera un PDF para un participante (código tal como en “pre”
   // ------------------------------------------------------------------
-  const generarPDFpara = async (participante, pdfTemplate) => {
+const generarPDFpara = async (participante, pdfTemplate) => {
+  // Validaciones iniciales
+  if (!participante) {
+    throw new Error('No se proporcionó información del participante');
+  }
+
+  if (!pdfTemplate) {
+    throw new Error('No se proporcionó la plantilla PDF');
+  }
+
+  const { nombre = '', teamName = '' } = participante;
+
+  // Validar datos requeridos
+  if (!nombre.trim()) {
+    throw new Error('El nombre del participante es obligatorio');
+  }
+
+  if (!teamName.trim()) {
+    throw new Error('El nombre del equipo es obligatorio');
+  }
+
+  try {
+    const pdfDoc = await PDFDocument.load(pdfTemplate);
+    pdfDoc.registerFontkit(fontkit);
+
+    // Configuración de tamaños de fuente
+    const TAMANO_NOMBRE = 28;
+    const TAMANO_EQUIPO = 22;
+    const ESPACIADO_VERTICAL = 60;
+
+    // Cargar fuente personalizada con manejo de errores
+    let customFont;
     try {
-      const { nombre = '', teamName = '' } = participante;
-      const pdfDoc = await PDFDocument.load(pdfTemplate);
-      pdfDoc.registerFontkit(fontkit);
-  
-      // Configuración de tamaños de fuente (ajustar según necesidad)
-      const TAMANO_NOMBRE = 20;
-      const TAMANO_EQUIPO = 18;
-      const ESPACIADO_VERTICAL = 60; // Espacio entre nombre y equipo
-  
-      // Cargar fuente (usar misma fuente que la plantilla)
-      let customFont;
-      try {
-          const fontBytes = await fetch('/fonts/Patria_Regular.otf').then(res => res.arrayBuffer());
-          customFont = await pdfDoc.embedFont(fontBytes);
-          console.log('Fuente personalizada cargada exitosamente');
-      } catch (error) {
-          console.error('Error al cargar la fuente personalizada, usando Helvetica por defecto:', error);
-          
+      const fontResponse = await fetch('/fonts/Patria_Regular.otf');
+      if (!fontResponse.ok) {
+        throw new Error(`Error al cargar fuente: ${fontResponse.statusText}`);
       }
-  
-      // Manejo de campos de formulario
-      const form = pdfDoc.getForm();
-      const fields = form.getFields();
-  
-      if (fields.length > 0) {
+      const fontBytes = await fontResponse.arrayBuffer();
+      customFont = await pdfDoc.embedFont(fontBytes);
+      console.log('Fuente personalizada cargada exitosamente');
+    } catch (error) {
+      console.warn('Usando fuente Helvetica por defecto:', error.message);
+      customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    }
+
+    // Manejo de campos de formulario con validación
+    const form = pdfDoc.getForm();
+    const fields = form.getFields();
+
+    if (fields.length > 0) {
+      try {
         fields.forEach(field => {
           const fieldName = field.getName().toLowerCase();
-      
+
           if (fieldName.includes('nombre')) {
-            field.setText(`${nombre.toUpperCase()}`);
+            field.setText(nombre.toUpperCase());
             field.setAlignment(1);
             field.setFontSize(TAMANO_NOMBRE);
-            // Set color through defaultAppearanc   
             field.updateAppearances(customFont);
           }
-      
+
           if (fieldName.includes('equipo')) {
-            field.setText(`${teamName}`);
+            field.setText(teamName);
             field.setAlignment(1);
-            field.setFontSize(TAMANO_EQUIPO); 
-            // Se.t color through defaultAppearance  
+            field.setFontSize(TAMANO_EQUIPO);
             field.updateAppearances(customFont);
           }
         });
         form.flatten();
-      } else {
-        // Dibujo directo en el PDF
+      } catch (error) {
+        throw new Error(`Error al procesar campos del formulario: ${error.message}`);
+      }
+    } else {
+      // Dibujo directo en el PDF con validaciones
+      try {
         const page = pdfDoc.getPages()[0];
+        if (!page) {
+          throw new Error('No se pudo obtener la página del PDF');
+        }
+
         const { width, height } = page.getSize();
-        // Texto "A" como prefijo1
+
+        // Prefijo
         const prefijo = "A";
         const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
         page.drawText(prefijo, {
@@ -274,7 +318,7 @@ export function Constancias() {
           size: TAMANO_NOMBRE,
           color: rgb(73, 73, 73),
         });
-  
+
         // Nombre del participante
         const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
         page.drawText(nombre.toUpperCase(), {
@@ -284,7 +328,7 @@ export function Constancias() {
           size: TAMANO_NOMBRE,
           color: rgb(73, 73, 73),
         });
-  
+
         // Nombre del equipo
         const equipoTexto = `Equipo: ${teamName}`;
         const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
@@ -295,14 +339,24 @@ export function Constancias() {
           size: TAMANO_EQUIPO,
           color: rgb(65, 65, 65),
         });
+      } catch (error) {
+        throw new Error(`Error al dibujar en el PDF: ${error.message}`);
       }
-  
-      return await pdfDoc.save();
-    } catch (err) {
-      console.error('Error generando PDF individual:', err);
-      throw err;
     }
-  };
+
+    // Guardar PDF con validación
+    try {
+      const pdfBytes = await pdfDoc.save();
+      return pdfBytes;
+    } catch (error) {
+      throw new Error(`Error al guardar el PDF: ${error.message}`);
+    }
+
+  } catch (err) {
+    console.error('Error detallado:', err);
+    throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
+  }
+};
 
   // ------------------------------------------------------------------
   // Enviar constancias por correo (lógica intacta de “post”)
@@ -570,6 +624,8 @@ const Button = styled.button`
   border-radius: 6px;
   padding: 10px 16px;
   cursor: pointer;
+  width: 100%;
+  display: block;
   &:hover {
     opacity: 0.9;
   }
@@ -628,7 +684,7 @@ const PreviewNav = styled.div`
 `;
 
 const NavButton = styled.button`
-  width: 40px;
+  min-width: 40px;
   height: 40px;
   font-size: 1.2rem;
   background-color: ${({ theme }) => theme.primary};
@@ -636,6 +692,10 @@ const NavButton = styled.button`
   border: none;
   border-radius: 50%;
   cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   &:hover {
     opacity: 0.8;
   }

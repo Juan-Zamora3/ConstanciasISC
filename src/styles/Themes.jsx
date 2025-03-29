@@ -46,7 +46,9 @@ export const Light ={
     texttertiary: "#969593",
     //toggle
     lightbackground: "linear-gradient(-225deg, #E3FDF5 0%, #FFE6FA 100%)",
-  lightcheckbox: "#fce100"
+    lightcheckbox: "#fce100",
+    scrollThumb: "#a8a7a7",       // Color del scroll en tema claro
+    scrollThumbHover: "#888888",  // Hover en tema claro
 }
 export const Dark = {
     bgtgderecha:"#21252B",
@@ -95,5 +97,7 @@ export const Dark = {
     texttertiary: "#969593",
     //toggle
     darkbackground:"linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.15) 100%), radial-gradient(at top center, rgba(255,255,255,0.40) 0%, rgba(0,0,0,0.40) 120%) #989898", 
-    darkcheckbox: "#757575"
+    darkcheckbox: "#757575",
+    scrollThumb: "#A18AFF",       // Color del scroll en tema oscuro
+    scrollThumbHover: "#6c63ff",  // Hover en tema oscuro
 }
