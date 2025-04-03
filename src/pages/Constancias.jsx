@@ -32,6 +32,9 @@ export function Constancias() {
 
   // 6) Referencia para subir la plantilla
   const fileInputRef = useRef(null);
+  
+  const [loadingPreviews, setLoadingPreviews] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   // ------------------------------------------------------------------
   // Cargar eventos al inicio
@@ -123,10 +126,20 @@ export function Constancias() {
     
     // If no teams selected, don't generate anything
     if (selectedTeamsList.length === 0) {
+      alert('No hay equipos seleccionados');
       return;
     }
     
+    setLoadingPreviews(true);
+    setProgress(0);
+    
     const previewBlobs = [];
+    
+    // Calculate total number of participants for progress tracking
+    const totalParticipants = selectedTeamsList.reduce((total, team) => 
+      total + team.integrantes.length, 0);
+    
+    let processedCount = 0;
     
     // Only generate for teams that are actually checked
     for (const team of selectedTeamsList) {
@@ -137,6 +150,11 @@ export function Constancias() {
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         previewBlobs.push(url);
+        
+        // Update progress after each PDF is generated
+        processedCount++;
+        const currentProgress = Math.round((processedCount / totalParticipants) * 100);
+        setProgress(currentProgress);
       }
     }
     
@@ -145,6 +163,11 @@ export function Constancias() {
       setPdfPreviews(previewBlobs);
       setCurrentPreviewIndex(0);
     }
+    
+    // Keep the "Constancias generadas" message visible for a moment
+    setTimeout(() => {
+      setLoadingPreviews(false);
+    }, 1500);
   };
   const handlePreviewConstancias = () => {
     if (plantillaPDF) {
@@ -544,16 +567,19 @@ const generarPDFpara = async (participante, pdfTemplate) => {
               <span style={{ marginLeft: '8px' }}>Enviar por correo</span>
             </CheckboxRow>
           </Section>
+          
     
           <Section>
             <Button onClick={handleGenerarConstancias}>
               Generar Constancias
             </Button>
+            
           </Section>
         </LeftPanel>
     
         {/* Panel Derecho: Previsualización */}
         <RightPanel>
+          
           <PreviewArea>
             {pdfPreviews.length > 0 ? (
               <iframe
@@ -588,6 +614,19 @@ const generarPDFpara = async (participante, pdfTemplate) => {
             </LoadingMessage>
           </LoadingOverlay>
         )}
+        {loadingPreviews && (
+  <LoadingOverlay>
+    <LoadingMessage style={{ width: '50vh', height: '50vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+      <ProgressCircle>
+        {progress}%
+      </ProgressCircle>
+      <div style={{ marginTop: '20px'}}>
+        {progress === 100 ? "Constancias generadas" : "Generando constancias..."}
+      </div>
+    </LoadingMessage>
+  </LoadingOverlay>
+)}
+        
       </Container>
     );
 }
@@ -601,7 +640,43 @@ const Container = styled.div`
   background-color: ${({ theme }) => theme.bgtotal};
   color: ${({ theme }) => theme.text};
 `;
+const ProgressContainer = styled.div`
+  margin-top: 10px;
+  text-align: center;
+`;
 
+
+const ProgressCircle = styled.div`
+  width: 10vh;
+  height: 10vh;
+  border-radius: 50%;
+  border: 5px solid ${({ theme }) => theme.primary};
+  border-top: 5px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  font-weight: bold;
+  color: ${({ theme }) => theme.primary};
+  position: relative;
+  animation: spin 1.5s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  &::after {
+
+    position: absolute;
+    animation: spinReverse 1.5s linear infinite;
+    
+    @keyframes spinReverse {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(-360deg); }
+    }
+  }
+`;
 const LeftPanel = styled.div`
   width: 400px;
   min-width: 320px;
