@@ -74,21 +74,6 @@ export function Constancias() {
           return teamData;
         });
         const allTeams = await Promise.all(promises);
-        setTeams(allTeams);
-
-        // Marcar todos los equipos en true
-        const initialChecks = {};
-        allTeams.forEach(t => { initialChecks[t.id] = true; });
-        setCheckedTeams(initialChecks);
-
-        // Limpiar previsualizaciones
-        setPdfPreviews([]);
-        setCurrentPreviewIndex(0);
-
-        // Generar constancias automáticamente si tenemos plantilla
-        if (plantillaPDF) {
-          await handleGenerarConstancias();
-        }
         if (isMounted) {
           setTeams(allTeams);
           const initialChecks = {};
@@ -128,10 +113,22 @@ export function Constancias() {
     }
   };
 
-
   const generatePreviewsForSelectedTeams = async () => {
-    const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
+    // Get only teams that are explicitly checked (true)
+    const selectedTeamsList = teams.filter(t => checkedTeams[t.id] === true);
+    
+    // Clear previous previews
+    setPdfPreviews([]);
+    setCurrentPreviewIndex(0);
+    
+    // If no teams selected, don't generate anything
+    if (selectedTeamsList.length === 0) {
+      return;
+    }
+    
     const previewBlobs = [];
+    
+    // Only generate for teams that are actually checked
     for (const team of selectedTeamsList) {
       // Generamos la constancia para cada integrante del equipo
       for (const integrante of team.integrantes) {
@@ -142,16 +139,24 @@ export function Constancias() {
         previewBlobs.push(url);
       }
     }
-    setPdfPreviews(previewBlobs);
-    setCurrentPreviewIndex(0);
+    
+    // Only update state if we have previews
+    if (previewBlobs.length > 0) {
+      setPdfPreviews(previewBlobs);
+      setCurrentPreviewIndex(0);
+    }
+  };
+  const handlePreviewConstancias = () => {
+    if (plantillaPDF) {
+      generatePreviewsForSelectedTeams();
+    } else {
+      alert('Por favor sube una plantilla PDF primero');
+    }
   };
   
+  // Ensure useEffect triggers correctly on checkbox changes
 
-  useEffect(() => {
-    if (plantillaPDF && teams.length > 0) {
-      generatePreviewsForSelectedTeams();
-    }
-  }, [checkedTeams, plantillaPDF, teams]);
+  
   
 
   // ------------------------------------------------------------------
@@ -159,16 +164,14 @@ export function Constancias() {
   // + si “enviar por correo” está marcado, enviar correos también
   // ------------------------------------------------------------------
   const handleGenerarConstancias = async () => {
-    const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
     if (!plantillaPDF) {
       alert('Por favor sube una plantilla PDF primero');
       return;
     }
-
+  
     // Filtramos solo equipos marcados
     const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
-
+  
     // Obtenemos todos los participantes
     const allParticipants = [];
     selectedTeamsList.forEach(team => {
@@ -179,40 +182,40 @@ export function Constancias() {
         });
       });
     });
-
+  
     if (allParticipants.length === 0) {
       alert('No hay integrantes seleccionados');
       return;
     }
-
+  
     try {
       // Preparamos un ZIP
       const zip = new JSZip();
       const previewBlobs = [];
-
+  
       // Generamos PDFs uno por uno
       for (let i = 0; i < allParticipants.length; i++) {
         const p = allParticipants[i];
         const pdfBytes = await generarPDFpara(p, plantillaPDF);
-
+  
         // Guardar en ZIP
         const fileName = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre || '').replace(/\s/g, '_')}.pdf`;
         zip.file(fileName, pdfBytes);
-
+  
         // Previsualización
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         previewBlobs.push(url);
       }
-
+  
       // Actualizamos el listado de previsualizaciones
       setPdfPreviews(previewBlobs);
       setCurrentPreviewIndex(0);
-
+  
       // Descargar ZIP final
       const content = await zip.generateAsync({ type: 'blob' });
       saveAs(content, 'constancias.zip');
-
+  
       // Si “enviar por correo” está activo, enviamos
       if (sendByEmail) {
         await handleEnviarCorreos();
@@ -446,136 +449,147 @@ const generarPDFpara = async (participante, pdfTemplate) => {
   // Toggle de selección de equipo
   // ------------------------------------------------------------------
   const toggleCheckTeam = (teamId) => {
-    setCheckedTeams(prev => ({
-      ...prev,
-      [teamId]: !prev[teamId]
-    }));
+    setCheckedTeams(prev => {
+      const newCheckedTeams = {
+        ...prev,
+        [teamId]: !prev[teamId]
+      };
+      return newCheckedTeams;
+    });
   };
 
   // ------------------------------------------------------------------
   // Render principal
   // ------------------------------------------------------------------
   return (
-    <Container>
-      {/* Panel Izquierdo */}
-      <LeftPanel>
-        <Section>
-          <Label>Plantilla PDF</Label>
-          <HiddenInput
-            type="file"
-            accept="application/pdf"
-            ref={fileInputRef}
-            onChange={handlePlantillaUpload}
-          />
-          <Button
-            onClick={() => fileInputRef.current.click()}
-            style={{ marginTop: '5px' }}
-          >
-            {plantillaPDF ? 'Plantilla cargada ✓' : 'Seleccionar archivo...'}
-          </Button>
-        </Section>
-
-        <Section>
-          <Label>Seleccionar Evento</Label>
-          <Select
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-          >
-            <option value="">-- Selecciona un evento --</option>
-            {events.map(ev => (
-              <option key={ev.id} value={ev.id}>
-                {ev.nombre}
-              </option>
-            ))}
-          </Select>
-        </Section>
-
-        <Section>
-          <Label>Equipos</Label>
-          <TableWrapper>
-            <StyledTable>
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Equipo</th>
-                  <th># Integrantes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teams.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={!!checkedTeams[t.id]}
-                        onChange={() => toggleCheckTeam(t.id)}
-                      />
-                    </td>
-                    <td>{t.nombre}</td>
-                    <td>{t.integrantes?.length || 0}</td>
+    
+      <Container>
+        {/* Panel Izquierdo */}
+        <LeftPanel>
+          <Section>
+            <Label>Plantilla PDF</Label>
+            <HiddenInput
+              type="file"
+              accept="application/pdf"
+              ref={fileInputRef}
+              onChange={handlePlantillaUpload}
+            />
+            <Button
+              onClick={() => fileInputRef.current.click()}
+              style={{ marginTop: '5px' }}
+            >
+              {plantillaPDF ? 'Plantilla cargada ✓' : 'Seleccionar archivo...'}
+            </Button>
+          </Section>
+    
+          <Section>
+            <Label>Seleccionar Evento</Label>
+            <Select
+              value={selectedEvent}
+              onChange={(e) => setSelectedEvent(e.target.value)}
+            >
+              <option value="">-- Selecciona un evento --</option>
+              {events.map(ev => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.nombre}
+                </option>
+              ))}
+            </Select>
+          </Section>
+    
+          <Section>
+            <Label>Equipos  <Button onClick={handlePreviewConstancias} style={{ marginBottom: '10px' }}>
+              Previsualizar Constancias
+            </Button></Label>
+            <TableWrapper>
+           
+            <Section>
+            
+            
+          </Section>
+              <StyledTable>
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Equipo</th>
+                    <th># Integrantes</th>
                   </tr>
-                ))}
-              </tbody>
-            </StyledTable>
-          </TableWrapper>
-        </Section>
-
-        <Section>
-          <CheckboxRow>
-            <input
-              type="checkbox"
-              checked={sendByEmail}
-              onChange={() => setSendByEmail(!sendByEmail)}
-            />
-            <span style={{ marginLeft: '8px' }}>Enviar por correo</span>
-          </CheckboxRow>
-        </Section>
-
-        <Section>
-          <Button onClick={handleGenerarConstancias}>
-            Generar Constancias
-          </Button>
-        </Section>
-      </LeftPanel>
-
-      {/* Panel Derecho: Previsualización */}
-      <RightPanel>
-        <PreviewArea>
-          {pdfPreviews.length > 0 ? (
-            <iframe
-              key={pdfPreviews[currentPreviewIndex]}
-              src={pdfPreviews[currentPreviewIndex]}
-              title="Vista prevía PDF"
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
-          ) : (
-            <Placeholder>
-              Aquí se mostrará la constancia generada
-            </Placeholder>
-          )}
-        </PreviewArea>
-        <PreviewNav>
-          <NavButton onClick={handlePrevPreview}>{'<'}</NavButton>
-          <span>
-            {pdfPreviews.length === 0
-              ? 'Sin previsualizaciones'
-              : `Constancia ${currentPreviewIndex + 1} / ${pdfPreviews.length}`
-            }
-          </span>
-          <NavButton onClick={handleNextPreview}>{'>'}</NavButton>
-        </PreviewNav>
-      </RightPanel>
-
-      {/* Overlay de carga al enviar correos */}
-      {loadingEmail && (
-        <LoadingOverlay>
-          <LoadingMessage>
-            Enviando constancias, por favor espere...
-          </LoadingMessage>
-        </LoadingOverlay>
-      )}
-    </Container>
-  );
+                </thead>
+                <tbody>
+                  {teams.map((t) => (
+                    <tr key={t.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={!!checkedTeams[t.id]}
+                          onChange={() => toggleCheckTeam(t.id)}
+                        />
+                      </td>
+                      <td>{t.nombre}</td>
+                      <td>{t.integrantes?.length || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </StyledTable>
+            </TableWrapper>
+          </Section>
+    
+          <Section>
+            <CheckboxRow>
+              <input
+                type="checkbox"
+                checked={sendByEmail}
+                onChange={() => setSendByEmail(!sendByEmail)}
+              />
+              <span style={{ marginLeft: '8px' }}>Enviar por correo</span>
+            </CheckboxRow>
+          </Section>
+    
+          <Section>
+            <Button onClick={handleGenerarConstancias}>
+              Generar Constancias
+            </Button>
+          </Section>
+        </LeftPanel>
+    
+        {/* Panel Derecho: Previsualización */}
+        <RightPanel>
+          <PreviewArea>
+            {pdfPreviews.length > 0 ? (
+              <iframe
+                key={pdfPreviews[currentPreviewIndex]}
+                src={pdfPreviews[currentPreviewIndex]}
+                title="Vista prevía PDF"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            ) : (
+              <Placeholder>
+                Aquí se mostrará la constancia generada
+              </Placeholder>
+            )}
+          </PreviewArea>
+          <PreviewNav>
+            <NavButton onClick={handlePrevPreview}>{'<'}</NavButton>
+            <span>
+              {pdfPreviews.length === 0
+                ? 'Sin previsualizaciones'
+                : `Constancia ${currentPreviewIndex + 1} / ${pdfPreviews.length}`
+              }
+            </span>
+            <NavButton onClick={handleNextPreview}>{'>'}</NavButton>
+          </PreviewNav>
+        </RightPanel>
+    
+        {/* Overlay de carga al enviar correos */}
+        {loadingEmail && (
+          <LoadingOverlay>
+            <LoadingMessage>
+              Enviando constancias, por favor espere...
+            </LoadingMessage>
+          </LoadingOverlay>
+        )}
+      </Container>
+    );
 }
 
 // ------------------------------------------------------------------
