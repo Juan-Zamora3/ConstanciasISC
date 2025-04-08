@@ -246,14 +246,75 @@ export function EquiposSection({ eventoId }) {
       alert('No se pudo eliminar el integrante.');
     }
   };
+    // ------------------------------------------------------------------
+  // Aggregar integrante a un equipo
+  // ------------------------------------------------------------------ 
+    const [addModalOpeni, setAddModalOpeni] = useState(false);
+    const [newInteg, setNewInteg] = useState({
+    nombre: '',
+    numControl: '',
+    carrera: '',
+    semestre: '',
+    correo: '',
+    equipoId: ''
+    });
+    const [equiposi, setEquiposi] = useState([]);
+    useEffect(() => {
+      const qEquipos = query(collection(db, 'equipos'), where('eventoId', '==', eventoId));
+      const unsubEq = onSnapshot(qEquipos, (snap) => {
+        const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setEquiposi(arr);
+      });
+      return () => unsubEq();
+    }, [eventoId]);
+    const handleOpenAddModali = () => {
+      setNewInteg({
+        nombre: '',
+        numControl: '',
+        carrera: '',
+        semestre: '',
+        correo: '',
+        equipoId: ''
+      });
+      setAddModalOpeni(true);
+    };
+    
+    const handleCloseAddModali = () => setAddModalOpeni(false);
+    const handleAddIntegrantei = async () => {
+      if (!newInteg.nombre.trim() || !newInteg.equipoId) {
+        alert('Completa el nombre y el equipo');
+        return;
+      }
+      try {
+        await addDoc(collection(db, 'integrantes'), {
+          eventoId,
+          equipoId: newInteg.equipoId,
+          nombre: newInteg.nombre,
+          numControl: newInteg.numControl,
+          carrera: newInteg.carrera,
+          semestre: newInteg.semestre,
+          correo: newInteg.correo
+        });
+        alert('Integrante agregado');
+        setAddModalOpeni(false);
+      } catch (error) {
+        console.error('Error al agregar integrante:', error);
+        alert('No se pudo agregar');
+      }
+    };
+    
+
 
   // ------------------------------------------------------------------
   // RENDER
   // ------------------------------------------------------------------
   return (
     <>
-      <AddButton onClick={handleOpenAddModal}>+ Agregar Equipo</AddButton>
-
+      <ButtonRow>
+  <AddButton onClick={handleOpenAddModal}>+ Agregar Equipo</AddButton>
+  <AddButton onClick={handleOpenAddModali}>+ Agregar Integrante</AddButton>
+</ButtonRow>
+  
       <TeamsGrid>
         {equipos.map((team) => (
           <TeamCard
@@ -264,7 +325,7 @@ export function EquiposSection({ eventoId }) {
           />
         ))}
       </TeamsGrid>
-
+  
       {/* Modal para CREAR equipo + integrantes */}
       {modalOpen && (
         <ModalBackdrop>
@@ -273,8 +334,7 @@ export function EquiposSection({ eventoId }) {
               <h2>Agregar Equipo</h2>
               <CloseButton onClick={() => setModalOpen(false)}>×</CloseButton>
             </ModalHeader>
-
-            {/* Nombre del Equipo */}
+  
             <FormGroup>
               <label>Nombre del Equipo</label>
               <input
@@ -282,8 +342,7 @@ export function EquiposSection({ eventoId }) {
                 onChange={(e) => setEquipoData({ ...equipoData, nombre: e.target.value })}
               />
             </FormGroup>
-
-            {/* Form para agregar integrantes al arreglo local */}
+  
             <FormGroupRow>
               <Column>
                 <label>Nombre</label>
@@ -302,7 +361,7 @@ export function EquiposSection({ eventoId }) {
                   onChange={(e) => setNewIntegrante({ ...newIntegrante, carrera: e.target.value })}
                 />
               </Column>
-
+  
               <Column>
                 <label>Semestre</label>
                 <Input
@@ -316,11 +375,11 @@ export function EquiposSection({ eventoId }) {
                 />
               </Column>
             </FormGroupRow>
+  
             <PrimaryButton onClick={handleAddManualIntegrante}>
               Agregar Integrante
             </PrimaryButton>
-
-            {/* Tabla de integrantes que se están por guardar */}
+  
             {manualIntegrantes.length > 0 && (
               <TablaContainer>
                 <Tabla>
@@ -356,7 +415,7 @@ export function EquiposSection({ eventoId }) {
                 </Tabla>
               </TablaContainer>
             )}
-
+  
             <ModalActions>
               <SecondaryButton onClick={() => setModalOpen(false)}>Cancelar</SecondaryButton>
               <PrimaryButton onClick={handleGuardarEquipo}>Guardar</PrimaryButton>
@@ -364,7 +423,7 @@ export function EquiposSection({ eventoId }) {
           </Modal>
         </ModalBackdrop>
       )}
-
+  
       {/* Modal para ver/editar equipo */}
       {editModalOpen && selectedTeam && (
         <ModalBackdrop>
@@ -373,6 +432,7 @@ export function EquiposSection({ eventoId }) {
               <h2>{selectedTeam.nombre}</h2>
               <CloseButton onClick={() => setEditModalOpen(false)}>×</CloseButton>
             </ModalHeader>
+  
             <FormGroup>
               <label>Nombre del Equipo</label>
               <input
@@ -380,8 +440,7 @@ export function EquiposSection({ eventoId }) {
                 onChange={(e) => setTeamName(e.target.value)}
               />
             </FormGroup>
-
-            {/* Tabla de integrantes de este equipo */}
+  
             <TablaContainer>
               <Tabla>
                 <thead>
@@ -413,7 +472,7 @@ export function EquiposSection({ eventoId }) {
                 </tbody>
               </Tabla>
             </TablaContainer>
-
+  
             <ModalActions>
               <SecondaryButton onClick={() => setEditModalOpen(false)}>Cerrar</SecondaryButton>
               <PrimaryButton onClick={handleUpdateTeam}>Guardar Cambios</PrimaryButton>
@@ -421,8 +480,8 @@ export function EquiposSection({ eventoId }) {
           </Modal>
         </ModalBackdrop>
       )}
-
-      {/* Modal para editar un integrante puntual */}
+  
+      {/* Modal para editar integrante puntual */}
       {editIntegranteOpen && (
         <ModalBackdrop>
           <Modal>
@@ -472,8 +531,76 @@ export function EquiposSection({ eventoId }) {
           </Modal>
         </ModalBackdrop>
       )}
+  
+      {/* Modal para AGREGAR integrante de forma general (externo a crear equipo) */}
+      {addModalOpeni && (
+        <ModalBackdrop>
+          <Modal>
+            <ModalHeader>
+              <h2>Agregar Integrante</h2>
+              <CloseButton onClick={handleCloseAddModali}>×</CloseButton>
+            </ModalHeader>
+  
+            <FormGroup>
+              <label>Nombre</label>
+              <input 
+                value={newInteg.nombre}
+                onChange={(e) => setNewInteg({ ...newInteg, nombre: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>No. Control</label>
+              <input
+                value={newInteg.numControl}
+                onChange={(e) => setNewInteg({ ...newInteg, numControl: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Carrera</label>
+              <input
+                value={newInteg.carrera}
+                onChange={(e) => setNewInteg({ ...newInteg, carrera: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Semestre</label>
+              <input
+                value={newInteg.semestre}
+                onChange={(e) => setNewInteg({ ...newInteg, semestre: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Correo</label>
+              <input
+                value={newInteg.correo}
+                onChange={(e) => setNewInteg({ ...newInteg, correo: e.target.value })}
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Equipo</label>
+              <select
+                value={newInteg.equipoId}
+                onChange={(e) => setNewInteg({ ...newInteg, equipoId: e.target.value })}
+              >
+                <option value="">-- Selecciona un equipo --</option>
+                {equiposi.map((eq) => (
+                  <option key={eq.id} value={eq.id}>
+                    {eq.nombre}
+                  </option>
+                ))}
+              </select>
+            </FormGroup>
+  
+            <ModalActions>
+              <SecondaryButton onClick={handleCloseAddModali}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={handleAddIntegrantei}>Guardar</PrimaryButton>
+            </ModalActions>
+          </Modal>
+        </ModalBackdrop>
+      )}
     </>
   );
+  
 }
 
 // ------------------------------------------------------------------
@@ -492,6 +619,12 @@ function TeamCard({ team, onOpen, onDelete }) {
 
 // --------------------- ESTILOS ---------------------
 
+const ButtonRow = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-bottom: 1rem;
+`;
+
 const AddButton = styled.button`
   padding: 10px 20px;
   border: none;
@@ -500,6 +633,7 @@ const AddButton = styled.button`
   border-radius: 6px;
   cursor: pointer;
   margin-bottom: 1rem;
+  margin-right: 10px;
 `;
 
 const TeamsGrid = styled.div`
