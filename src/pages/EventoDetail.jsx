@@ -77,7 +77,7 @@ export function EventoDetail() {
 
       {/* Contenido principal */}
       {activeTab === 'equipos' && (
-        <EquiposSection eventoId={evento.id} />
+        <EquiposSection eventoId={evento.id} /> 
       )}
       {activeTab === 'Maestros' && (
         <MaestrosSection eventoId={evento.id} />

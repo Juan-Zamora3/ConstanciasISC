@@ -146,7 +146,7 @@ export function Constancias() {
       // Generamos la constancia para cada integrante del equipo
       for (const integrante of team.integrantes) {
         const participante = { teamName: team.nombre, ...integrante };
-        const pdfBytes = await generarPDFpara(participante, plantillaPDF);
+        const pdfBytes = await generarPDFpara(participante, plantillaPDF, mensajePersonalizado);
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         previewBlobs.push(url);
@@ -252,89 +252,65 @@ export function Constancias() {
   // ------------------------------------------------------------------
   // Genera un PDF para un participante (código tal como en “pre”
   // ------------------------------------------------------------------
-const generarPDFpara = async (participante, pdfTemplate) => {
-  // Validaciones iniciales
-  if (!participante) {
-    throw new Error('No se proporcionó información del participante');
-  }
-
-  if (!pdfTemplate) {
-    throw new Error('No se proporcionó la plantilla PDF');
-  }
-
-  const { nombre = '', teamName = '' } = participante;
-
-  // Validar datos requeridos
-  if (!nombre.trim()) {
-    throw new Error('El nombre del participante es obligatorio');
-  }
-
-  if (!teamName.trim()) {
-    throw new Error('El nombre del equipo es obligatorio');
-  }
-
-  try {
-    const pdfDoc = await PDFDocument.load(pdfTemplate);
-    pdfDoc.registerFontkit(fontkit);
-
-    // Configuración de tamaños de fuente
-    const TAMANO_NOMBRE = 28;
-    const TAMANO_EQUIPO = 22;
-    const ESPACIADO_VERTICAL = 60;
-
-    // Cargar fuente personalizada con manejo de errores
-    let customFont;
+  const generarPDFpara = async (participante, pdfTemplate, mensajePersonalizado) => {
+    if (!participante) throw new Error('No se proporcionó información del participante');
+    if (!pdfTemplate) throw new Error('No se proporcionó la plantilla PDF');
+  
+    const { nombre = '', teamName = '' } = participante;
+  
+    if (!nombre.trim()) throw new Error('El nombre del participante es obligatorio');
+    if (!teamName.trim()) throw new Error('El nombre del equipo es obligatorio');
+  
     try {
-      const fontResponse = await fetch('/fonts/Patria_Regular.otf');
-      if (!fontResponse.ok) {
-        throw new Error(`Error al cargar fuente: ${fontResponse.statusText}`);
-      }
-      const fontBytes = await fontResponse.arrayBuffer();
-      customFont = await pdfDoc.embedFont(fontBytes);
-      console.log('Fuente personalizada cargada exitosamente');
-    } catch (error) {
-      console.warn('Usando fuente Helvetica por defecto:', error.message);
-      customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    }
-
-    // Manejo de campos de formulario con validación
-    const form = pdfDoc.getForm();
-    const fields = form.getFields();
-
-    if (fields.length > 0) {
+      const pdfDoc = await PDFDocument.load(pdfTemplate);
+      pdfDoc.registerFontkit(fontkit);
+  
+      const TAMANO_NOMBRE = 28;
+      const TAMANO_EQUIPO = 22;
+      const ESPACIADO_VERTICAL = 60;
+  
+      let customFont;
       try {
-        fields.forEach(field => {
-          const fieldName = field.getName().toLowerCase();
-
-          if (fieldName.includes('nombre')) {
-            field.setText(nombre.toUpperCase());
-            field.setAlignment(1);
-            field.setFontSize(TAMANO_NOMBRE);
-            field.updateAppearances(customFont);
-          }
-
-          if (fieldName.includes('equipo')) {
-            field.setText(teamName);
-            field.setAlignment(1);
-            field.setFontSize(TAMANO_EQUIPO);
-            field.updateAppearances(customFont);
-          }
-        });
-        form.flatten();
+        const fontResponse = await fetch('/fonts/Patria_Regular.otf');
+        if (!fontResponse.ok) throw new Error(`Error al cargar fuente: ${fontResponse.statusText}`);
+        const fontBytes = await fontResponse.arrayBuffer();
+        customFont = await pdfDoc.embedFont(fontBytes);
+        console.log('Fuente personalizada cargada exitosamente');
       } catch (error) {
-        throw new Error(`Error al procesar campos del formulario: ${error.message}`);
+        console.warn('Usando fuente Helvetica por defecto:', error.message);
+        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
-    } else {
-      // Dibujo directo en el PDF con validaciones
-      try {
-        const page = pdfDoc.getPages()[0];
-        if (!page) {
-          throw new Error('No se pudo obtener la página del PDF');
+  
+      const form = pdfDoc.getForm();
+      const fields = form.getFields();
+      let page = pdfDoc.getPages()[0];
+      const { width, height } = page.getSize();
+  
+      // Si tiene campos de formulario
+      if (fields.length > 0) {
+        try {
+          fields.forEach(field => {
+            const fieldName = field.getName().toLowerCase();
+            if (fieldName.includes('nombre')) {
+              field.setText(nombre.toUpperCase());
+              field.setAlignment(1);
+              field.setFontSize(TAMANO_NOMBRE);
+              field.updateAppearances(customFont);
+            }
+            if (fieldName.includes('equipo')) {
+              field.setText(teamName);
+              field.setAlignment(1);
+              field.setFontSize(TAMANO_EQUIPO);
+              field.updateAppearances(customFont);
+            }
+          });
+  
+          form.flatten();
+        } catch (error) {
+          throw new Error(`Error al procesar campos del formulario: ${error.message}`);
         }
-
-        const { width, height } = page.getSize();
-
-        // Prefijo
+      } else {
+        // Dibujo directo
         const prefijo = "A";
         const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
         page.drawText(prefijo, {
@@ -344,8 +320,7 @@ const generarPDFpara = async (participante, pdfTemplate) => {
           size: TAMANO_NOMBRE,
           color: rgb(73, 73, 73),
         });
-
-        // Nombre del participante
+  
         const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
         page.drawText(nombre.toUpperCase(), {
           x: (width - nombreWidth) / 2,
@@ -354,8 +329,7 @@ const generarPDFpara = async (participante, pdfTemplate) => {
           size: TAMANO_NOMBRE,
           color: rgb(73, 73, 73),
         });
-
-        // Nombre del equipo
+  
         const equipoTexto = `Equipo: ${teamName}`;
         const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
         page.drawText(equipoTexto, {
@@ -365,24 +339,51 @@ const generarPDFpara = async (participante, pdfTemplate) => {
           size: TAMANO_EQUIPO,
           color: rgb(65, 65, 65),
         });
-      } catch (error) {
-        throw new Error(`Error al dibujar en el PDF: ${error.message}`);
       }
-    }
-
-    // Guardar PDF con validación
-    try {
+  
+      // 🔥 Este bloque SIEMPRE se ejecuta para poner el mensaje personalizado
+      if (mensajePersonalizado && mensajePersonalizado.trim()) {
+        const mensajeFontSize = 16;
+        const maxLineWidth = width * 0.8; // Máximo 80% del ancho de la hoja
+        const palabras = mensajePersonalizado.trim().split(/\s+/);
+        const lineas = [];
+        let lineaActual = "";
+      
+        for (let i = 0; i < palabras.length; i++) {
+          const testLinea = lineaActual + (lineaActual ? " " : "") + palabras[i];
+          const testWidth = customFont.widthOfTextAtSize(testLinea, mensajeFontSize);
+          if (testWidth < maxLineWidth) {
+            lineaActual = testLinea;
+          } else {
+            lineas.push(lineaActual);
+            lineaActual = palabras[i];
+          }
+        }
+        if (lineaActual) lineas.push(lineaActual);
+      
+        const mensajeBaseY = height / 2 + 20; // Posición vertgitical inicial
+        const lineSpacing = 20; // Espacio entre líneas
+      
+        lineas.forEach((linea, index) => {
+          const textWidth = customFont.widthOfTextAtSize(linea, mensajeFontSize);
+          page.drawText(linea, {
+            x: (width - textWidth) / 2,
+            y: mensajeBaseY - index * lineSpacing,
+            font: customFont,
+            size: mensajeFontSize,
+            color: rgb(0.2, 0.2, 0.2),
+          });
+        });
+      }
+  
       const pdfBytes = await pdfDoc.save();
       return pdfBytes;
-    } catch (error) {
-      throw new Error(`Error al guardar el PDF: ${error.message}`);
+    } catch (err) {
+      console.error('Error detallado:', err);
+      throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
     }
-
-  } catch (err) {
-    console.error('Error detallado:', err);
-    throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
-  }
-};
+  };
+  
 
   // ------------------------------------------------------------------
   // Enviar constancias por correo (lógica intacta de “post”)
@@ -481,6 +482,9 @@ const generarPDFpara = async (participante, pdfTemplate) => {
     });
   };
 
+  const [mensajePersonalizado, setMensajePersonalizado] = useState('');
+
+
   // ------------------------------------------------------------------
   // Render principal
   // ------------------------------------------------------------------
@@ -556,6 +560,18 @@ const generarPDFpara = async (participante, pdfTemplate) => {
               </StyledTable>
             </TableWrapper>
           </Section>
+
+          <Section>
+  <Label>Mensaje personalizado</Label>
+  <textarea
+    value={mensajePersonalizado}
+    onChange={(e) => setMensajePersonalizado(e.target.value)}
+    placeholder="Escribe aquí el mensaje que aparecerá en cada constancia..."
+    rows={4}
+    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
+  />
+</Section>
+
     
           <Section>
             <CheckboxRow>
