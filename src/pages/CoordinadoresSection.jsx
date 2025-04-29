@@ -2,11 +2,10 @@
 import React from 'react';
 import styled from 'styled-components';
 
-export function MaestrosSection({ eventoId }) {
+export function CoordinadoresSection({ eventoId }) {
   return (
     <Container>
-      <div>esta es la seccion de maestros </div>
-    </Container>
+<div>Esta es la seccion de coordinadores</div></Container>
   );
 }
 

@@ -9,6 +9,7 @@ import { db } from '../firebaseConfig';
 // Importar subcomponentes (puedes ponerlos en archivos separados si gustas)
 import { EquiposSection } from './EquiposSection';
 import { MaestrosSection } from './MaestrosSection';
+import { CoordinadoresSection } from './CoordinadoresSection';
 
 export function EventoDetail() {
   const { id } = useParams();        // ID del evento => /evento/:id
@@ -66,6 +67,12 @@ export function EventoDetail() {
           >
             Maestros
           </NavButton>
+          <NavButton
+            isActive={activeTab === 'Coordinadores'}
+            onClick={() => setActiveTab('Coordinadores')}
+          >
+            Coordinadores
+          </NavButton>
         </RightButtons>
       </Header>
 
@@ -81,6 +88,9 @@ export function EventoDetail() {
       )}
       {activeTab === 'Maestros' && (
         <MaestrosSection eventoId={evento.id} />
+      )}
+      {activeTab === 'Coordinadores' && (
+        <CoordinadoresSection eventoId={evento.id} />
       )}
     </Container>
   );
