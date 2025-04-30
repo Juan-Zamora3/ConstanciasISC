@@ -267,7 +267,8 @@ export function Constancias() {
   
       const TAMANO_NOMBRE = 28;
       const TAMANO_EQUIPO = 22;
-      const ESPACIADO_VERTICAL = 60;
+      const MENSAJE_FONT_SIZE = 16;
+      const ESPACIADO_LINEA = 20;
   
       let customFont;
       try {
@@ -281,77 +282,31 @@ export function Constancias() {
         customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       }
   
-      const form = pdfDoc.getForm();
-      const fields = form.getFields();
-      let page = pdfDoc.getPages()[0];
+      const page = pdfDoc.getPages()[0];
       const { width, height } = page.getSize();
   
-      // Si tiene campos de formulario
-      if (fields.length > 0) {
-        try {
-          fields.forEach(field => {
-            const fieldName = field.getName().toLowerCase();
-            if (fieldName.includes('nombre')) {
-              field.setText(nombre.toUpperCase());
-              field.setAlignment(1);
-              field.setFontSize(TAMANO_NOMBRE);
-              field.updateAppearances(customFont);
-            }
-            if (fieldName.includes('equipo')) {
-              field.setText(teamName);
-              field.setAlignment(1);
-              field.setFontSize(TAMANO_EQUIPO);
-              field.updateAppearances(customFont);
-            }
-          });
+      // 1. Dibuja el nombre
+      const nombreY = height / 2 + 40;
+      const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
+      page.drawText(nombre.toUpperCase(), {
+        x: (width - nombreWidth) / 2,
+        y: nombreY,
+        font: customFont,
+        size: TAMANO_NOMBRE,
+        color: rgb(73 / 255, 73 / 255, 73 / 255),
+      });
   
-          form.flatten();
-        } catch (error) {
-          throw new Error(`Error al procesar campos del formulario: ${error.message}`);
-        }
-      } else {
-        // Dibujo directo
-        const prefijo = "A";
-        const prefijoWidth = customFont.widthOfTextAtSize(prefijo, TAMANO_NOMBRE);
-        page.drawText(prefijo, {
-          x: (width - prefijoWidth) / 2,
-          y: height / 2 + 40,
-          font: customFont,
-          size: TAMANO_NOMBRE,
-          color: rgb(73, 73, 73),
-        });
-  
-        const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
-        page.drawText(nombre.toUpperCase(), {
-          x: (width - nombreWidth) / 2,
-          y: height / 2,
-          font: customFont,
-          size: TAMANO_NOMBRE,
-          color: rgb(73, 73, 73),
-        });
-  
-        const equipoTexto = `Equipo: ${teamName}`;
-        const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
-        page.drawText(equipoTexto, {
-          x: (width - equipoWidth) / 2,
-          y: (height / 2) - ESPACIADO_VERTICAL,
-          font: customFont,
-          size: TAMANO_EQUIPO,
-          color: rgb(65, 65, 65),
-        });
-      }
-  
-      // 🔥 Este bloque SIEMPRE se ejecuta para poner el mensaje personalizado
+      // 2. Mensaje personalizado debajo del nombre
+      let yDespuesDelMensaje = nombreY - 30;
       if (mensajePersonalizado && mensajePersonalizado.trim()) {
-        const mensajeFontSize = 16;
-        const maxLineWidth = width * 0.8; // Máximo 80% del ancho de la hoja
+        const maxLineWidth = width * 0.8;
         const palabras = mensajePersonalizado.trim().split(/\s+/);
         const lineas = [];
         let lineaActual = "";
-      
+  
         for (let i = 0; i < palabras.length; i++) {
           const testLinea = lineaActual + (lineaActual ? " " : "") + palabras[i];
-          const testWidth = customFont.widthOfTextAtSize(testLinea, mensajeFontSize);
+          const testWidth = customFont.widthOfTextAtSize(testLinea, MENSAJE_FONT_SIZE);
           if (testWidth < maxLineWidth) {
             lineaActual = testLinea;
           } else {
@@ -360,21 +315,33 @@ export function Constancias() {
           }
         }
         if (lineaActual) lineas.push(lineaActual);
-      
-        const mensajeBaseY = height / 2 + 20; // Posición vertgitical inicial
-        const lineSpacing = 20; // Espacio entre líneas
-      
+  
+        const mensajeBaseY = nombreY - 30;
+  
         lineas.forEach((linea, index) => {
-          const textWidth = customFont.widthOfTextAtSize(linea, mensajeFontSize);
+          const lineWidth = customFont.widthOfTextAtSize(linea, MENSAJE_FONT_SIZE);
           page.drawText(linea, {
-            x: (width - textWidth) / 2,
-            y: mensajeBaseY - index * lineSpacing,
+            x: (width - lineWidth) / 2,
+            y: mensajeBaseY - index * ESPACIADO_LINEA,
             font: customFont,
-            size: mensajeFontSize,
+            size: MENSAJE_FONT_SIZE,
             color: rgb(0.2, 0.2, 0.2),
           });
         });
+  
+        yDespuesDelMensaje = mensajeBaseY - lineas.length * ESPACIADO_LINEA - 20;
       }
+  
+      // 3. Dibuja el equipo después del mensaje (o después del nombre si no hay mensaje)
+      const equipoTexto = `Equipo: ${teamName}`;
+      const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
+      page.drawText(equipoTexto, {
+        x: (width - equipoWidth) / 2,
+        y: yDespuesDelMensaje,
+        font: customFont,
+        size: TAMANO_EQUIPO,
+        color: rgb(65 / 255, 65 / 255, 65 / 255),
+      });
   
       const pdfBytes = await pdfDoc.save();
       return pdfBytes;
@@ -383,6 +350,8 @@ export function Constancias() {
       throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
     }
   };
+  
+  
   
 
   // ------------------------------------------------------------------
