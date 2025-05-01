@@ -452,6 +452,67 @@ export function Constancias() {
   };
 
   const [mensajePersonalizado, setMensajePersonalizado] = useState('');
+  // al inicio del componente
+const [tipoConstancia, setTipoConstancia] = useState('equipos');
+useEffect(() => {
+  if (!selectedEvent) {
+    setTeams([]);
+    return;
+  }
+  const loadData = async () => {
+    try {
+      if (tipoConstancia === 'equipos') {
+        // tu lógica actual de equipos + integrantes...
+        const q = query(
+          collection(db, 'equipos'),
+          where('eventoId', '==', selectedEvent)
+        );
+        const snap = await getDocs(q);
+        const arr = await Promise.all(
+          snap.docs.map(async d => {
+            const data = { id: d.id, ...d.data() };
+            const qInteg = query(
+              collection(db, 'integrantes'),
+              where('equipoId', '==', d.id)
+            );
+            const snapI = await getDocs(qInteg);
+            data.integrantes = snapI.docs.map(i => ({ id: i.id, ...i.data() }));
+            return data;
+          })
+        );
+        setTeams(arr);
+        setCheckedTeams(arr.reduce((acc, t) => ({ ...acc, [t.id]: true }), {}));
+      }
+      else if (tipoConstancia === 'coordinadores') {
+        const q = query(
+          collection(db, 'coordinadores'),
+          where('eventoId', '==', selectedEvent)
+        );
+        const snap = await getDocs(q);
+        // En este caso cada “coordinador” es un participante
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Puedes reutilizar `teams` para mostrar esta lista genérica
+        setTeams(arr.map(c => ({ id: c.id, nombre: c.nombre, integrantes: [c] })));
+        setCheckedTeams(arr.reduce((acc, c) => ({ ...acc, [c.id]: true }), {}));
+      }
+      else if (tipoConstancia === 'maestros') {
+        const q = query(
+          collection(db, 'maestros'),
+          where('eventoId', '==', selectedEvent)
+        );
+        const snap = await getDocs(q);
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setTeams(arr.map(m => ({ id: m.id, nombre: m.nombre, integrantes: [m] })));
+        setCheckedTeams(arr.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
+      }
+    } catch (err) {
+      console.error('Error cargando datos:', err);
+    }
+  };
+  loadData();
+}, [selectedEvent, tipoConstancia]);
+
+
 
 
   // ------------------------------------------------------------------
@@ -492,7 +553,18 @@ export function Constancias() {
               ))}
             </Select>
           </Section>
-    
+          <Section>
+  <Label>Tipo de constancia</Label>
+  <Select
+    value={tipoConstancia}
+    onChange={e => setTipoConstancia(e.target.value)}
+  >
+    <option value="equipos">Equipos de estudiantes</option>
+    <option value="coordinadores">Coordinadores</option>
+    <option value="maestros">Maestros</option>
+  </Select>
+</Section>
+
           <Section>
             <Label>Equipos  <Button onClick={handlePreviewConstancias} style={{ marginBottom: '10px' }}>
               Previsualizar Constancias
