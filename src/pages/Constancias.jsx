@@ -21,6 +21,11 @@ export function Constancias() {
 
   // 2) Checkboxes de equipos
   const [checkedTeams, setCheckedTeams] = useState({});
+  // Para coordinadores: cuál está seleccionado (radio)
+const [selectedCoordId, setSelectedCoordId] = useState(null);
+// Mensaje personalizado para coordinadores
+const [mensajePersonalizado, setMensajePersonalizado] = useState('');
+
 
   // 3) Checkbox “Enviar por correo”
   const [sendByEmail, setSendByEmail] = useState(false);
@@ -453,7 +458,6 @@ export function Constancias() {
     });
   };
 
-  const [mensajePersonalizado, setMensajePersonalizado] = useState('');
   const handleMensajeChange = (e) => {
     setMensajePersonalizado(e.target.value);
   };
@@ -520,60 +524,92 @@ useEffect(() => {
 
 // justo después de tus otros useEffects:
 useEffect(() => {
-  // Sólo cargamos si hay evento y es uno de los dos tipos configurables
-  if (
-    !selectedEvent ||
-    (tipoConstancia !== 'maestros' && tipoConstancia !== 'equipos')
-  ) {
+  if (!selectedEvent) {
     setMensajePersonalizado('');
     return;
   }
+  // para coordinadores usamos el id del radio, para los demás usamos el tipo
+  const docId = tipoConstancia === 'coordinadores'
+    ? `coordinadores__${selectedCoordId}`
+    : tipoConstancia;
 
   const loadMensaje = async () => {
     try {
-      // Ruta apuntando al sub-colección configConstancias dentro del evento
       const ref = doc(
         db,
         'eventos',
         selectedEvent,
         'configConstancias',
-        tipoConstancia
+        docId
       );
       const snap = await getDoc(ref);
-if (!snap.exists()) {
-  // Si no hay documento, lo creamos con un texto por defecto (vacío)
-  await setDoc(ref, { texto: '' });
-  setMensajePersonalizado('');
-} else {
-  setMensajePersonalizado(snap.data().texto);
-}
+      if (snap.exists()) {
+        setMensajePersonalizado(snap.data().texto || '');
+      } else {
+        // si no existe, lo creamos vacío
+        await setDoc(ref, { texto: '' });
+        setMensajePersonalizado('');
+      }
     } catch (err) {
       console.error('Error cargando mensaje:', err);
       setMensajePersonalizado('');
     }
   };
-
   loadMensaje();
-}, [selectedEvent, tipoConstancia]);
+}, [selectedEvent, tipoConstancia, selectedCoordId]);
+
+
+// Cuando cambias de coordinador, carga su mensaje
+useEffect(() => {
+  if (!selectedEvent || tipoConstancia !== 'coordinadores' || !selectedCoordId) {
+    setMensajePersonalizado('');
+    return;
+  }
+  const load = async () => {
+    const ref = doc(
+      db,
+      'eventos',
+      selectedEvent,
+      'configConstancias',
+      `coordinadores__${selectedCoordId}`
+    );
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      setMensajePersonalizado(snap.data().texto || '');
+    } else {
+      // crea el doc vacío para la primera vez
+      await setDoc(ref, { texto: '' });
+      setMensajePersonalizado('');
+    }
+  };
+  load();
+}, [selectedEvent, tipoConstancia, selectedCoordId]);
+
 
 // Y para guardar:
 const handleMensajeBlur = async () => {
   if (!selectedEvent) return;
-  if (tipoConstancia === 'maestros' || tipoConstancia === 'equipos') {
-    try {
-      const ref = doc(
-        db,
-        'eventos',
-        selectedEvent,
-        'configConstancias',
-        tipoConstancia
-      );
-      await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
-    } catch (err) {
-      console.error('Error guardando mensaje:', err);
-    }
+  // si es coordinadores y no hay ninguno seleccionado, salimos
+  if (tipoConstancia === 'coordinadores' && !selectedCoordId) return;
+
+  const docId = tipoConstancia === 'coordinadores'
+    ? `coordinadores__${selectedCoordId}`
+    : tipoConstancia;
+
+  try {
+    const ref = doc(
+      db,
+      'eventos',
+      selectedEvent,
+      'configConstancias',
+      docId
+    );
+    await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
+  } catch (err) {
+    console.error('Error guardando mensaje:', err);
   }
 };
+
 
 
 
@@ -653,11 +689,20 @@ const handleMensajeBlur = async () => {
                   {teams.map((t) => (
                     <tr key={t.id}>
                       <td>
-                        <input
-                          type="checkbox"
-                          checked={!!checkedTeams[t.id]}
-                          onChange={() => toggleCheckTeam(t.id)}
-                        />
+                      {tipoConstancia === 'coordinadores' ? (
+    <input
+      type="radio"
+      name="seleccionCoordinador"
+      checked={selectedCoordId === t.id}
+      onChange={() => setSelectedCoordId(t.id)}
+    />
+  ) : (
+    <input
+      type="checkbox"
+      checked={!!checkedTeams[t.id]}
+      onChange={() => toggleCheckTeam(t.id)}
+    />
+  )}
                       </td>
                       <td>{t.nombre}</td>
                       <td>{t.integrantes?.length || 0}</td>
@@ -668,18 +713,34 @@ const handleMensajeBlur = async () => {
             </TableWrapper>
           </Section>
 
-          <Section>
+        
+  <Section>
+    <Label>Mensaje personalizado</Label>
+    <textarea
+      value={mensajePersonalizado}
+      onChange={e => setMensajePersonalizado(e.target.value)}
+      onBlur={async () => {
+        if (!selectedEvent || !selectedCoordId) return;
+        const ref = doc(
+          db,
+          'eventos',
+          selectedEvent,
+          'configConstancias',
+          `coordinadores__${selectedCoordId}`
+        );
+        await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
+      }}
+      placeholder="Escribe aquí el mensaje que aparecerá en cada constancia..."
+      rows={4}
+      style={{
+        width: '100%',
+        padding: '8px',
+        borderRadius: '6px',
+        border: '1px solid #ccc'
+      }}
+    />
+  </Section>
 
-  <Label>Mensaje personalizado</Label>
-  <textarea
-    value={mensajePersonalizado}
-    onChange={handleMensajeChange}
-    onBlur={handleMensajeBlur}
-    placeholder="Escribe aquí el mensaje que aparecerá en cada constancia..."
-    rows={4}
-    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
-  />
-</Section>
 
     
           <Section>
