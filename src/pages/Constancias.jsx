@@ -9,6 +9,8 @@ import { getFirestore, collection, getDocs, query, where } from 'firebase/firest
 import { PDFName, PDFNumber } from 'pdf-lib';
 // Reutilizamos tu instancia de Firebase
 import { db } from '../firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
 
 export function Constancias() {
   // 1) Estados generales
@@ -452,6 +454,10 @@ export function Constancias() {
   };
 
   const [mensajePersonalizado, setMensajePersonalizado] = useState('');
+  const handleMensajeChange = (e) => {
+    setMensajePersonalizado(e.target.value);
+  };
+
   // al inicio del componente
 const [tipoConstancia, setTipoConstancia] = useState('equipos');
 useEffect(() => {
@@ -511,6 +517,66 @@ useEffect(() => {
   };
   loadData();
 }, [selectedEvent, tipoConstancia]);
+
+// justo después de tus otros useEffects:
+useEffect(() => {
+  // Sólo cargamos si hay evento y es uno de los dos tipos configurables
+  if (
+    !selectedEvent ||
+    (tipoConstancia !== 'maestros' && tipoConstancia !== 'equipos')
+  ) {
+    setMensajePersonalizado('');
+    return;
+  }
+
+  const loadMensaje = async () => {
+    try {
+      // Ruta apuntando al sub-colección configConstancias dentro del evento
+      const ref = doc(
+        db,
+        'eventos',
+        selectedEvent,
+        'configConstancias',
+        tipoConstancia
+      );
+      const snap = await getDoc(ref);
+if (!snap.exists()) {
+  // Si no hay documento, lo creamos con un texto por defecto (vacío)
+  await setDoc(ref, { texto: '' });
+  setMensajePersonalizado('');
+} else {
+  setMensajePersonalizado(snap.data().texto);
+}
+    } catch (err) {
+      console.error('Error cargando mensaje:', err);
+      setMensajePersonalizado('');
+    }
+  };
+
+  loadMensaje();
+}, [selectedEvent, tipoConstancia]);
+
+// Y para guardar:
+const handleMensajeBlur = async () => {
+  if (!selectedEvent) return;
+  if (tipoConstancia === 'maestros' || tipoConstancia === 'equipos') {
+    try {
+      const ref = doc(
+        db,
+        'eventos',
+        selectedEvent,
+        'configConstancias',
+        tipoConstancia
+      );
+      await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
+    } catch (err) {
+      console.error('Error guardando mensaje:', err);
+    }
+  }
+};
+
+
+
 
 
 
@@ -603,10 +669,12 @@ useEffect(() => {
           </Section>
 
           <Section>
+
   <Label>Mensaje personalizado</Label>
   <textarea
     value={mensajePersonalizado}
-    onChange={(e) => setMensajePersonalizado(e.target.value)}
+    onChange={handleMensajeChange}
+    onBlur={handleMensajeBlur}
     placeholder="Escribe aquí el mensaje que aparecerá en cada constancia..."
     rows={4}
     style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
