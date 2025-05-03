@@ -63,42 +63,7 @@ const [mensajePersonalizado, setMensajePersonalizado] = useState('');
   // Cuando cambia el evento seleccionado, cargar equipos + integrantes.
   // Luego generar constancias de forma automática si ya hay plantilla.
   // ------------------------------------------------------------------
-  useEffect(() => {
-    let isMounted = true;
-    if (!selectedEvent) {
-      setTeams([]);
-      return;
-    }
-    const loadTeams = async () => {
-      try {
-        setTeams([]);
-        setCheckedTeams({});
-        setPdfPreviews([]);
-        const q = query(collection(db, 'equipos'), where('eventoId', '==', selectedEvent));
-        const snapTeams = await getDocs(q);
-        const promises = snapTeams.docs.map(async (teamDoc) => {
-          const teamData = { id: teamDoc.id, ...teamDoc.data() };
-          const qInteg = query(collection(db, 'integrantes'), where('equipoId', '==', teamDoc.id));
-          const snapInteg = await getDocs(qInteg);
-          teamData.integrantes = snapInteg.docs.map(d => ({ id: d.id, ...d.data() }));
-          return teamData;
-        });
-        const allTeams = await Promise.all(promises);
-        if (isMounted) {
-          setTeams(allTeams);
-          const initialChecks = {};
-          allTeams.forEach(t => { initialChecks[t.id] = true; });
-          setCheckedTeams(initialChecks);
-        }
-      } catch (error) {
-        console.error('Error cargando equipos:', error);
-      }
-    };
-    loadTeams();
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedEvent]);
+ 
 
   // ------------------------------------------------------------------
   // Cargar la plantilla PDF
@@ -464,95 +429,89 @@ const handleGenerarConstancias = async () => {
   };
 
   // al inicio del componente
-const [tipoConstancia, setTipoConstancia] = useState('equipos');
-useEffect(() => {
-  if (!selectedEvent) {
-    setTeams([]);
-    return;
-  }
+  const [tipoConstancia, setTipoConstancia] = useState('equipos');
 
-  const loadData = async () => {
-    try {
-      // 1) Equipos de estudiantes
-      if (tipoConstancia === 'equipos') {
-        const q = query(
-          collection(db, 'equipos'),
-          where('eventoId', '==', selectedEvent)
-        );
-        const snap = await getDocs(q);
-        const arr = await Promise.all(
-          snap.docs.map(async d => {
-            const data = { id: d.id, ...d.data() };
-            const qInteg = query(
-              collection(db, 'integrantes'),
-              where('equipoId', '==', d.id)
-            );
-            const snapI = await getDocs(qInteg);
-            data.integrantes = snapI.docs.map(i => ({ id: i.id, ...i.data() }));
-            return data;
-          })
-        );
-        setTeams(arr);
-        setCheckedTeams(
-          arr.reduce((acc, t) => ({ ...acc, [t.id]: true }), {})
-        );
-      }
-
-      // 2) Coordinadores (agrupados por tipo)
-      else if (tipoConstancia === 'coordinadores') {
-        const q = query(
-          collection(db, 'coordinadores'),
-          where('eventoId', '==', selectedEvent)
-        );
-        const snap = await getDocs(q);
-        // 2.1) transformamos en [{ id, tipo, ... }]
-        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // 2.2) agrupamos por campo `tipo`
-        const grouped = docs.reduce((acc, c) => {
-          const tipo = c.tipo;
-          if (!acc[tipo]) {
-            acc[tipo] = [];
-          }
-          acc[tipo].push(c);
-          return acc;
-        }, {});
-        // 2.3) construimos el array de "equipos" para la UI
-        const equipos = Object.entries(grouped).map(([tipo, integrantes]) => ({
-          id: tipo,         // usamos el tipo como id único
-          nombre: tipo,     // la columna mostrará el tipo
-          integrantes,      // array con todos los coordinadores de esa categoría
-        }));
-        setTeams(equipos);
-        setCheckedTeams(
-          equipos.reduce((acc, e) => ({ ...acc, [e.id]: true }), {})
-        );
-      }
-
-      // 3) Maestros
-      else if (tipoConstancia === 'maestros') {
-        const q = query(
-          collection(db, 'maestros'),
-          where('eventoId', '==', selectedEvent)
-        );
-        const snap = await getDocs(q);
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const equipos = arr.map(m => ({
-          id: m.id,
-          nombre: m.nombre,
-          integrantes: [m],
-        }));
-        setTeams(equipos);
-        setCheckedTeams(
-          equipos.reduce((acc, e) => ({ ...acc, [e.id]: true }), {})
-        );
-      }
-    } catch (err) {
-      console.error('Error cargando datos:', err);
+  useEffect(() => {
+    if (!selectedEvent) {
+      setTeams([]);
+      return;
     }
-  };
-
-  loadData();
-}, [selectedEvent, tipoConstancia]);
+  
+    const loadData = async () => {
+      try {
+        let data = [];
+  
+        // 1) Equipos de estudiantes
+        if (tipoConstancia === 'equipos') {
+          const q = query(
+            collection(db, 'equipos'),
+            where('eventoId', '==', selectedEvent)
+          );
+          const snap = await getDocs(q);
+          data = await Promise.all(
+            snap.docs.map(async d => {
+              const team = { id: d.id, ...d.data() };
+              const qI = query(
+                collection(db, 'integrantes'),
+                where('equipoId', '==', d.id)
+              );
+              const snapI = await getDocs(qI);
+              team.integrantes = snapI.docs.map(i => ({ id: i.id, ...i.data() }));
+              return team;
+            })
+          );
+        }
+  
+        // 2) Coordinadores (agrupados por c.tipo)
+        else if (tipoConstancia === 'coordinadores') {
+          const q = query(
+            collection(db, 'coordinadores'),
+            where('eventoId', '==', selectedEvent)
+          );
+          const snap = await getDocs(q);
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          // Agrupar por campo `tipo`
+          const grouped = docs.reduce((acc, c) => {
+            acc[c.tipo] = acc[c.tipo] || [];
+            acc[c.tipo].push(c);
+            return acc;
+          }, {});
+          // Construir array para la UI
+          data = Object.entries(grouped).map(([tipo, integrantes]) => ({
+            id: tipo,       // usamos el tipo como id
+            nombre: tipo,   // mostramos la categoría
+            integrantes     // array de coordinadores de esa categoría
+          }));
+        }
+  
+        // 3) Maestros
+        else if (tipoConstancia === 'maestros') {
+          const q = query(
+            collection(db, 'maestros'),
+            where('eventoId', '==', selectedEvent)
+          );
+          const snap = await getDocs(q);
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          data = docs.map(m => ({
+            id: m.id,
+            nombre: m.nombre,
+            integrantes: [m]
+          }));
+        }
+  
+        // Actualizar estado y checks
+        setTeams(data);
+        setCheckedTeams(
+          data.reduce((acc, item) => ({ ...acc, [item.id]: true }), {})
+        );
+      } catch (err) {
+        console.error('Error cargando datos:', err);
+      }
+    };
+  
+    loadData();
+  }, [selectedEvent, tipoConstancia]);
+  
 
 
 
@@ -562,11 +521,19 @@ useEffect(() => {
     setMensajePersonalizado('');
     return;
   }
-  // para coordinadores usamos el id del radio, para los demás usamos el tipo
-  const docId = tipoConstancia === 'coordinadores'
-    ? `coordinadores__${selectedCoordId}`
-    : tipoConstancia;
+  // Define el docId según el tipo
+  let docId;
+  if (tipoConstancia === 'coordinadores') {
+    if (!selectedCoordId) {
+      setMensajePersonalizado('');
+      return;
+    }
+    docId = `coordinadores__${selectedCoordId}`;
+  } else {
+    docId = tipoConstancia; // 'equipos' o 'maestros'
+  }
 
+  let mounted = true;
   const loadMensaje = async () => {
     try {
       const ref = doc(
@@ -577,20 +544,24 @@ useEffect(() => {
         docId
       );
       const snap = await getDoc(ref);
+      if (!mounted) return;
       if (snap.exists()) {
         setMensajePersonalizado(snap.data().texto || '');
       } else {
-        // si no existe, lo creamos vacío
         await setDoc(ref, { texto: '' });
         setMensajePersonalizado('');
       }
     } catch (err) {
-      console.error('Error cargando mensaje:', err);
-      setMensajePersonalizado('');
+      console.error('Error cargando mensaje personalizado:', err);
+      if (mounted) setMensajePersonalizado('');
     }
   };
   loadMensaje();
+  return () => {
+    mounted = false;
+  };
 }, [selectedEvent, tipoConstancia, selectedCoordId]);
+
 
 
 // Cuando cambias de coordinador, carga su mensaje
@@ -623,12 +594,15 @@ useEffect(() => {
 // Y para guardar:
 const handleMensajeBlur = async () => {
   if (!selectedEvent) return;
-  // si es coordinadores y no hay ninguno seleccionado, salimos
-  if (tipoConstancia === 'coordinadores' && !selectedCoordId) return;
 
-  const docId = tipoConstancia === 'coordinadores'
-    ? `coordinadores__${selectedCoordId}`
-    : tipoConstancia;
+  // Decidir docId según el tipo
+  let docId;
+  if (tipoConstancia === 'coordinadores') {
+    if (!selectedCoordId) return;
+    docId = `coordinadores__${selectedCoordId}`;
+  } else {
+    docId = tipoConstancia; // 'equipos' o 'maestros'
+  }
 
   try {
     const ref = doc(
@@ -640,9 +614,10 @@ const handleMensajeBlur = async () => {
     );
     await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
   } catch (err) {
-    console.error('Error guardando mensaje:', err);
+    console.error('Error guardando mensaje personalizado:', err);
   }
 };
+
 
 
 
@@ -754,17 +729,7 @@ const handleMensajeBlur = async () => {
     <textarea
       value={mensajePersonalizado}
       onChange={e => setMensajePersonalizado(e.target.value)}
-      onBlur={async () => {
-        if (!selectedEvent || !selectedCoordId) return;
-        const ref = doc(
-          db,
-          'eventos',
-          selectedEvent,
-          'configConstancias',
-          `coordinadores__${selectedCoordId}`
-        );
-        await setDoc(ref, { texto: mensajePersonalizado }, { merge: true });
-      }}
+      onBlur={handleMensajeBlur}
       placeholder="Escribe aquí el mensaje que aparecerá en cada constancia..."
       rows={4}
       style={{
