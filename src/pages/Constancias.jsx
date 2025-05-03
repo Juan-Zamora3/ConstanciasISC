@@ -470,10 +470,11 @@ useEffect(() => {
     setTeams([]);
     return;
   }
+
   const loadData = async () => {
     try {
+      // 1) Equipos de estudiantes
       if (tipoConstancia === 'equipos') {
-        // tu lógica actual de equipos + integrantes...
         const q = query(
           collection(db, 'equipos'),
           where('eventoId', '==', selectedEvent)
@@ -492,20 +493,42 @@ useEffect(() => {
           })
         );
         setTeams(arr);
-        setCheckedTeams(arr.reduce((acc, t) => ({ ...acc, [t.id]: true }), {}));
+        setCheckedTeams(
+          arr.reduce((acc, t) => ({ ...acc, [t.id]: true }), {})
+        );
       }
+
+      // 2) Coordinadores (agrupados por tipo)
       else if (tipoConstancia === 'coordinadores') {
         const q = query(
           collection(db, 'coordinadores'),
           where('eventoId', '==', selectedEvent)
         );
         const snap = await getDocs(q);
-        // En este caso cada “coordinador” es un participante
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Puedes reutilizar `teams` para mostrar esta lista genérica
-        setTeams(arr.map(c => ({ id: c.id, nombre: c.nombre, integrantes: [c] })));
-        setCheckedTeams(arr.reduce((acc, c) => ({ ...acc, [c.id]: true }), {}));
+        // 2.1) transformamos en [{ id, tipo, ... }]
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // 2.2) agrupamos por campo `tipo`
+        const grouped = docs.reduce((acc, c) => {
+          const tipo = c.tipo;
+          if (!acc[tipo]) {
+            acc[tipo] = [];
+          }
+          acc[tipo].push(c);
+          return acc;
+        }, {});
+        // 2.3) construimos el array de "equipos" para la UI
+        const equipos = Object.entries(grouped).map(([tipo, integrantes]) => ({
+          id: tipo,         // usamos el tipo como id único
+          nombre: tipo,     // la columna mostrará el tipo
+          integrantes,      // array con todos los coordinadores de esa categoría
+        }));
+        setTeams(equipos);
+        setCheckedTeams(
+          equipos.reduce((acc, e) => ({ ...acc, [e.id]: true }), {})
+        );
       }
+
+      // 3) Maestros
       else if (tipoConstancia === 'maestros') {
         const q = query(
           collection(db, 'maestros'),
@@ -513,15 +536,25 @@ useEffect(() => {
         );
         const snap = await getDocs(q);
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setTeams(arr.map(m => ({ id: m.id, nombre: m.nombre, integrantes: [m] })));
-        setCheckedTeams(arr.reduce((acc, m) => ({ ...acc, [m.id]: true }), {}));
+        const equipos = arr.map(m => ({
+          id: m.id,
+          nombre: m.nombre,
+          integrantes: [m],
+        }));
+        setTeams(equipos);
+        setCheckedTeams(
+          equipos.reduce((acc, e) => ({ ...acc, [e.id]: true }), {})
+        );
       }
     } catch (err) {
       console.error('Error cargando datos:', err);
     }
   };
+
   loadData();
 }, [selectedEvent, tipoConstancia]);
+
+
 
 // justo después de tus otros useEffects:
 useEffect(() => {
