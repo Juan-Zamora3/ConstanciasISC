@@ -123,59 +123,63 @@ const [mensajePersonalizado, setMensajePersonalizado] = useState('');
     }
   };
 
-  const generatePreviewsForSelectedTeams = async () => {
-    // Get only teams that are explicitly checked (true)
-    const selectedTeamsList = teams.filter(t => checkedTeams[t.id] === true);
-    
-    // Clear previous previews
-    setPdfPreviews([]);
-    setCurrentPreviewIndex(0);
-    
-    // If no teams selected, don't generate anything
-    if (selectedTeamsList.length === 0) {
-      alert('No hay equipos seleccionados');
+  // 1) Previsualización
+const generatePreviewsForSelectedTeams = async () => {
+  // 1.1) Elegir lista según tipo
+  let selectedItems = [];
+  if (tipoConstancia === 'coordinadores') {
+    if (!selectedCoordId) {
+      alert('Selecciona un coordinador primero');
       return;
     }
-    
-    setLoadingPreviews(true);
-    setProgress(0);
-    
-    const previewBlobs = [];
-    
-    // Calculate total number of participants for progress tracking
-    const totalParticipants = selectedTeamsList.reduce((total, team) => 
-      total + team.integrantes.length, 0);
-    
-    let processedCount = 0;
-    
-    // Only generate for teams that are actually checked
-    for (const team of selectedTeamsList) {
-      // Generamos la constancia para cada integrante del equipo
-      for (const integrante of team.integrantes) {
-        const participante = { teamName: team.nombre, ...integrante };
-        const pdfBytes = await generarPDFpara(participante, plantillaPDF, mensajePersonalizado);
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        previewBlobs.push(url);
-        
-        // Update progress after each PDF is generated
-        processedCount++;
-        const currentProgress = Math.round((processedCount / totalParticipants) * 100);
-        setProgress(currentProgress);
-      }
+    selectedItems = teams.filter(t => t.id === selectedCoordId);
+  } else {
+    selectedItems = teams.filter(t => checkedTeams[t.id] === true);
+  }
+
+  // 1.2) Limpiar previas
+  setPdfPreviews([]);
+  setCurrentPreviewIndex(0);
+
+  if (selectedItems.length === 0) {
+    alert(
+      tipoConstancia === 'coordinadores'
+        ? 'No hay coordinador seleccionado'
+        : 'No hay equipos seleccionados'
+    );
+    return;
+  }
+
+  setLoadingPreviews(true);
+  setProgress(0);
+
+  const previewBlobs = [];
+  // contar participantes para el progreso
+  const total = selectedItems.reduce((sum, t) => sum + (t.integrantes?.length || 0), 0);
+  let count = 0;
+
+  // 1.3) Generar uno a uno
+  for (const team of selectedItems) {
+    for (const integrante of team.integrantes) {
+      const participante = { teamName: team.nombre, ...integrante };
+      const pdfBytes = await generarPDFpara(participante, plantillaPDF, mensajePersonalizado);
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      previewBlobs.push(URL.createObjectURL(blob));
+
+      count++;
+      setProgress(Math.round((count / total) * 100));
     }
-    
-    // Only update state if we have previews
-    if (previewBlobs.length > 0) {
-      setPdfPreviews(previewBlobs);
-      setCurrentPreviewIndex(0);
-    }
-    
-    // Keep the "Constancias generadas" message visible for a moment
-    setTimeout(() => {
-      setLoadingPreviews(false);
-    }, 1500);
-  };
+  }
+
+  if (previewBlobs.length > 0) {
+    setPdfPreviews(previewBlobs);
+    setCurrentPreviewIndex(0);
+  }
+
+  // dejar un momento el mensaje de 100%
+  setTimeout(() => setLoadingPreviews(false), 1500);
+};
+
   const handlePreviewConstancias = () => {
     if (plantillaPDF) {
       generatePreviewsForSelectedTeams();
@@ -193,68 +197,65 @@ const [mensajePersonalizado, setMensajePersonalizado] = useState('');
   // Generar TODAS las constancias => descarga ZIP + previsualización
   // + si “enviar por correo” está marcado, enviar correos también
   // ------------------------------------------------------------------
-  const handleGenerarConstancias = async () => {
-    if (!plantillaPDF) {
-      alert('Por favor sube una plantilla PDF primero');
+ // 2) Generar ZIP y descarga
+const handleGenerarConstancias = async () => {
+  if (!plantillaPDF) {
+    alert('Por favor sube una plantilla PDF primero');
+    return;
+  }
+
+  // 2.1) Construir lista de participantes según tipo
+  let allParticipants = [];
+  if (tipoConstancia === 'coordinadores') {
+    if (!selectedCoordId) {
+      alert('Selecciona un coordinador primero');
       return;
     }
-  
-    // Filtramos solo equipos marcados
-    const selectedTeamsList = teams.filter(t => checkedTeams[t.id]);
-  
-    // Obtenemos todos los participantes
-    const allParticipants = [];
-    selectedTeamsList.forEach(team => {
-      team.integrantes.forEach(integ => {
-        allParticipants.push({
-          teamName: team.nombre,
-          ...integ,
-        });
-      });
-    });
-  
-    if (allParticipants.length === 0) {
-      alert('No hay integrantes seleccionados');
-      return;
+    const equipo = teams.find(t => t.id === selectedCoordId);
+    equipo.integrantes.forEach(i => allParticipants.push({ teamName: equipo.nombre, ...i }));
+  } else {
+    teams
+      .filter(t => checkedTeams[t.id])
+      .forEach(t =>
+        t.integrantes.forEach(i =>
+          allParticipants.push({ teamName: t.nombre, ...i })
+        )
+      );
+  }
+
+  if (allParticipants.length === 0) {
+    alert('No hay integrantes seleccionados');
+    return;
+  }
+
+  try {
+    const zip = new JSZip();
+    const previewBlobs = [];
+
+    for (const p of allParticipants) {
+      const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado);
+      const name = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre||'').replace(/\s/g, '_')}.pdf`;
+      zip.file(name, pdfBytes);
+
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      previewBlobs.push(URL.createObjectURL(blob));
     }
-  
-    try {
-      // Preparamos un ZIP
-      const zip = new JSZip();
-      const previewBlobs = [];
-  
-      // Generamos PDFs uno por uno
-      for (let i = 0; i < allParticipants.length; i++) {
-        const p = allParticipants[i];
-        const pdfBytes = await generarPDFpara(p, plantillaPDF);
-  
-        // Guardar en ZIP
-        const fileName = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre || '').replace(/\s/g, '_')}.pdf`;
-        zip.file(fileName, pdfBytes);
-  
-        // Previsualización
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        previewBlobs.push(url);
-      }
-  
-      // Actualizamos el listado de previsualizaciones
-      setPdfPreviews(previewBlobs);
-      setCurrentPreviewIndex(0);
-  
-      // Descargar ZIP final
-      const content = await zip.generateAsync({ type: 'blob' });
-      saveAs(content, 'constancias.zip');
-  
-      // Si “enviar por correo” está activo, enviamos
-      if (sendByEmail) {
-        await handleEnviarCorreos();
-      }
-    } catch (error) {
-      console.error('Error generando constancias:', error);
-      alert('Ocurrió un error durante la generación de constancias');
-    }
-  };
+
+    // mostrar previsualizaciones
+    setPdfPreviews(previewBlobs);
+    setCurrentPreviewIndex(0);
+
+    // descargar ZIP
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, 'constancias.zip');
+
+    if (sendByEmail) await handleEnviarCorreos();
+  } catch (err) {
+    console.error('Error generando constancias:', err);
+    alert('Ocurrió un error durante la generación de constancias');
+  }
+};
+
 
   // ------------------------------------------------------------------
   // Genera un PDF para un participante (código tal como en “pre”
@@ -609,6 +610,7 @@ const handleMensajeBlur = async () => {
     console.error('Error guardando mensaje:', err);
   }
 };
+
 
 
 
