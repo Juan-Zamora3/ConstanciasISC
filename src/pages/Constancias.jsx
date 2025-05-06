@@ -226,103 +226,93 @@ const handleGenerarConstancias = async () => {
   // Genera un PDF para un participante (código tal como en “pre”
   // ------------------------------------------------------------------
   const generarPDFpara = async (participante, pdfTemplate, mensajePersonalizado) => {
+    // 0) Validaciones previas
     if (!participante) throw new Error('No se proporcionó información del participante');
     if (!pdfTemplate) throw new Error('No se proporcionó la plantilla PDF');
-  
-    const { nombre = '', teamName = '' } = participante;
-  
+    const { nombre = '' } = participante;
     if (!nombre.trim()) throw new Error('El nombre del participante es obligatorio');
-    if (!teamName.trim()) throw new Error('El nombre del equipo es obligatorio');
   
     try {
+      // 1) Cargo la plantilla y registro fontkit
       const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
   
-      const TAMANO_NOMBRE = 28;
-      const TAMANO_EQUIPO = 22;
-      const MENSAJE_FONT_SIZE = 16;
-      const ESPACIADO_LINEA = 20;
+      // 2) Cargo y embebo Arial Regular y Bold (nombres CASE SENSITIVE)
+      const [regResp, boldResp] = await Promise.all([
+        fetch('/fonts/Patria_Regular.otf'),
+        fetch('/fonts/Patria_Regular.otf'),
+      ]);
+      if (!regResp.ok)  throw new Error('No se encontró /fonts/Patria_Regular.otf');
+      if (!boldResp.ok) throw new Error('No se encontró /fonts/Patria_Regular.otf');
+      const [regBytes, boldBytes] = await Promise.all([
+        regResp.arrayBuffer(),
+        boldResp.arrayBuffer(),
+      ]);
+      const fontReg  = await pdfDoc.embedFont(regBytes);
+      const fontBold = await pdfDoc.embedFont(boldBytes);
   
-      let customFont;
-      try {
-        const fontResponse = await fetch('/fonts/Patria_Regular.otf');
-        if (!fontResponse.ok) throw new Error(`Error al cargar fuente: ${fontResponse.statusText}`);
-        const fontBytes = await fontResponse.arrayBuffer();
-        customFont = await pdfDoc.embedFont(fontBytes);
-        console.log('Fuente personalizada cargada exitosamente');
-      } catch (error) {
-        console.warn('Usando fuente Helvetica por defecto:', error.message);
-        customFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      }
-  
+      // 3) Parámetros de dibujo
       const page = pdfDoc.getPages()[0];
       const { width, height } = page.getSize();
+      const SIZE_NAME      = 28;
+      const SIZE_TEXT      = 14;
+      const LINE_HEIGHT    = 20;
+      const MARGIN_H       = 50;
+      const COLOR_NAME     = rgb(73/255, 73/255, 73/255);
+      const COLOR_TEXT     = rgb(0.2, 0.2, 0.2);
   
-      // 1. Dibuja el nombre
-      const nombreY = height / 2 + 40;
-      const nombreWidth = customFont.widthOfTextAtSize(nombre.toUpperCase(), TAMANO_NOMBRE);
-      page.drawText(nombre.toUpperCase(), {
-        x: (width - nombreWidth) / 2,
-        y: nombreY,
-        font: customFont,
-        size: TAMANO_NOMBRE,
-        color: rgb(73 / 255, 73 / 255, 73 / 255),
+      // 4) Dibujo el nombre (centrado)
+      const nameTXT = nombre.toUpperCase();
+      const nameW   = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
+      const nameY   = height / 2 + 50;
+      page.drawText(nameTXT, {
+        x:    (width - nameW) / 2.5,
+        y:    nameY,
+        font: fontBold,
+        size: SIZE_NAME,
+        color: COLOR_NAME,
       });
   
-      // 2. Mensaje personalizado debajo del nombre
-      let yDespuesDelMensaje = nombreY - 30;
-      if (mensajePersonalizado && mensajePersonalizado.trim()) {
-        const maxLineWidth = width * 0.8;
-        const palabras = mensajePersonalizado.trim().split(/\s+/);
-        const lineas = [];
-        let lineaActual = "";
-  
-        for (let i = 0; i < palabras.length; i++) {
-          const testLinea = lineaActual + (lineaActual ? " " : "") + palabras[i];
-          const testWidth = customFont.widthOfTextAtSize(testLinea, MENSAJE_FONT_SIZE);
-          if (testWidth < maxLineWidth) {
-            lineaActual = testLinea;
-          } else {
-            lineas.push(lineaActual);
-            lineaActual = palabras[i];
-          }
+      // 5) Dibujo el párrafo con word-wrapping (centrado)
+      const text = mensajePersonalizado.trim();
+      const maxW = width - 2 * MARGIN_H;
+      // rompo en líneas
+      const palabras = text.split(/\s+/);
+      const lineas = [];
+      let linea = '';
+      for (const palabra of palabras) {
+        const prueba = linea ? `${linea} ${palabra}` : palabra;
+        if (fontReg.widthOfTextAtSize(prueba, SIZE_TEXT) <= maxW) {
+          linea = prueba;
+        } else {
+          lineas.push(linea);
+          linea = palabra;
         }
-        if (lineaActual) lineas.push(lineaActual);
+      }
+      if (linea) lineas.push(linea);
   
-        const mensajeBaseY = nombreY - 30;
-  
-        lineas.forEach((linea, index) => {
-          const lineWidth = customFont.widthOfTextAtSize(linea, MENSAJE_FONT_SIZE);
-          page.drawText(linea, {
-            x: (width - lineWidth) / 2,
-            y: mensajeBaseY - index * ESPACIADO_LINEA,
-            font: customFont,
-            size: MENSAJE_FONT_SIZE,
-            color: rgb(0.2, 0.2, 0.2),
-          });
+      // empiezo justo debajo del nombre
+      let cursorY = nameY - SIZE_NAME -5;
+      for (const l of lineas) {
+        const w = fontReg.widthOfTextAtSize(l, SIZE_TEXT);
+        page.drawText(l, {
+          x:     (width - w) / 2.5,
+          y:     cursorY,
+          font:  fontReg,
+          size:  SIZE_TEXT,
+          color: COLOR_TEXT,
         });
-  
-        yDespuesDelMensaje = mensajeBaseY - lineas.length * ESPACIADO_LINEA - 20;
+        cursorY -= LINE_HEIGHT;
       }
   
-      // 3. Dibuja el equipo después del mensaje (o después del nombre si no hay mensaje)
-      const equipoTexto = `Equipo: ${teamName}`;
-      const equipoWidth = customFont.widthOfTextAtSize(equipoTexto, TAMANO_EQUIPO);
-      page.drawText(equipoTexto, {
-        x: (width - equipoWidth) / 2,
-        y: yDespuesDelMensaje,
-        font: customFont,
-        size: TAMANO_EQUIPO,
-        color: rgb(65 / 255, 65 / 255, 65 / 255),
-      });
-  
-      const pdfBytes = await pdfDoc.save();
-      return pdfBytes;
+      // 6) Devuelvo el PDF modificado
+      return await pdfDoc.save();
     } catch (err) {
-      console.error('Error detallado:', err);
+      console.error('Error generando PDF:', err);
       throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
     }
   };
+  
   
   
   
