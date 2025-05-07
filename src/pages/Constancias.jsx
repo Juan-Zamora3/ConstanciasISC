@@ -127,7 +127,7 @@ const generatePreviewsForSelectedTeams = async () => {
   for (const team of selectedItems) {
     for (const integrante of team.integrantes) {
       const participante = { teamName: team.nombre, ...integrante };
-      const pdfBytes = await generarPDFpara(participante, plantillaPDF, mensajePersonalizado);
+      const pdfBytes = await generarPDFpara(participante, plantillaPDF, mensajePersonalizado,tipoConstancia);
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       previewBlobs.push(URL.createObjectURL(blob));
 
@@ -198,7 +198,7 @@ const handleGenerarConstancias = async () => {
     const previewBlobs = [];
 
     for (const p of allParticipants) {
-      const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado);
+      const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado,tipoConstancia);
       const name = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre||'').replace(/\s/g, '_')}.pdf`;
       zip.file(name, pdfBytes);
 
@@ -225,58 +225,62 @@ const handleGenerarConstancias = async () => {
   // ------------------------------------------------------------------
   // Genera un PDF para un participante (código tal como en “pre”
   // ------------------------------------------------------------------
-  const generarPDFpara = async (participante, pdfTemplate, mensajePersonalizado) => {
-    // 0) Validaciones previas
+  const generarPDFpara = async (
+    participante,
+    pdfTemplate,
+    mensajePersonalizado,
+    tipoConstancia
+  ) => {
     if (!participante) throw new Error('No se proporcionó información del participante');
     if (!pdfTemplate) throw new Error('No se proporcionó la plantilla PDF');
-    const { nombre = '' } = participante;
+  
+    const { nombre = '', teamName = '' } = participante;
     if (!nombre.trim()) throw new Error('El nombre del participante es obligatorio');
   
     try {
-      // 1) Cargo la plantilla y registro fontkit
       const pdfDoc = await PDFDocument.load(pdfTemplate);
       pdfDoc.registerFontkit(fontkit);
   
-      // 2) Cargo y embebo Arial Regular y Bold (nombres CASE SENSITIVE)
       const [regResp, boldResp] = await Promise.all([
         fetch('/fonts/Patria_Regular.otf'),
         fetch('/fonts/Patria_Regular.otf'),
       ]);
-      if (!regResp.ok)  throw new Error('No se encontró /fonts/Patria_Regular.otf');
-      if (!boldResp.ok) throw new Error('No se encontró /fonts/Patria_Regular.otf');
+  
+      if (!regResp.ok || !boldResp.ok)
+        throw new Error('No se encontró /fonts/Patria_Regular.otf');
+  
       const [regBytes, boldBytes] = await Promise.all([
         regResp.arrayBuffer(),
         boldResp.arrayBuffer(),
       ]);
-      const fontReg  = await pdfDoc.embedFont(regBytes);
+  
+      const fontReg = await pdfDoc.embedFont(regBytes);
       const fontBold = await pdfDoc.embedFont(boldBytes);
   
-      // 3) Parámetros de dibujo
       const page = pdfDoc.getPages()[0];
       const { width, height } = page.getSize();
-      const SIZE_NAME      = 28;
-      const SIZE_TEXT      = 14;
-      const LINE_HEIGHT    = 20;
-      const MARGIN_H       = 50;
-      const COLOR_NAME     = rgb(73/255, 73/255, 73/255);
-      const COLOR_TEXT     = rgb(0.2, 0.2, 0.2);
+      const SIZE_NAME = 28;
+      const SIZE_TEXT = 14;
+      const LINE_HEIGHT = 20;
+      const MARGIN_H = 50;
+      const COLOR_NAME = rgb(73 / 255, 73 / 255, 73 / 255);
+      const COLOR_TEXT = rgb(0.2, 0.2, 0.2);
   
-      // 4) Dibujo el nombre (centrado)
+      // Nombre del participante
       const nameTXT = nombre.toUpperCase();
-      const nameW   = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
-      const nameY   = height / 2 + 50;
+      const nameW = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
+      const nameY = height / 2 + 50;
       page.drawText(nameTXT, {
-        x:    (width - nameW) / 2.5,
-        y:    nameY,
+        x: (width - nameW) / 2,
+        y: nameY,
         font: fontBold,
         size: SIZE_NAME,
         color: COLOR_NAME,
       });
   
-      // 5) Dibujo el párrafo con word-wrapping (centrado)
+      // Mensaje personalizado (word-wrapping)
       const text = mensajePersonalizado.trim();
       const maxW = width - 2 * MARGIN_H;
-      // rompo en líneas
       const palabras = text.split(/\s+/);
       const lineas = [];
       let linea = '';
@@ -291,27 +295,42 @@ const handleGenerarConstancias = async () => {
       }
       if (linea) lineas.push(linea);
   
-      // empiezo justo debajo del nombre
-      let cursorY = nameY - SIZE_NAME -5;
+      let cursorY = nameY - SIZE_NAME - 5;
       for (const l of lineas) {
         const w = fontReg.widthOfTextAtSize(l, SIZE_TEXT);
         page.drawText(l, {
-          x:     (width - w) / 2.5,
-          y:     cursorY,
-          font:  fontReg,
-          size:  SIZE_TEXT,
+          x: (width - w) / 2,
+          y: cursorY,
+          font: fontReg,
+          size: SIZE_TEXT,
           color: COLOR_TEXT,
         });
         cursorY -= LINE_HEIGHT;
       }
   
-      // 6) Devuelvo el PDF modificado
+      // Mostrar equipo SOLO para tipo 'equipos'
+      if (tipoConstancia === 'equipos' && teamName.trim()) {
+
+        const eqTXT = `EQUIPO: ${teamName.toUpperCase()}`;
+        const eqW = fontReg.widthOfTextAtSize(eqTXT, SIZE_TEXT);
+        page.drawText(eqTXT, {
+          x: (width - eqW) / 2,
+          y: cursorY - LINE_HEIGHT,
+          font: fontReg,
+          size: SIZE_TEXT,
+          color: COLOR_TEXT,
+        });
+      }
+  
       return await pdfDoc.save();
     } catch (err) {
       console.error('Error generando PDF:', err);
       throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
     }
   };
+  
+  
+  
   
   
   
@@ -349,7 +368,7 @@ const handleGenerarConstancias = async () => {
         const p = allParticipants[i];
         // Solo enviamos si tiene correo
         if (!p.correo) continue;
-        const pdfBytes = await generarPDFpara(p, plantillaPDF);
+        const pdfBytes = await generarPDFpara(p, plantillaPDF,tipoConstancia);
         const base64Pdf = arrayBufferToBase64(pdfBytes);
 
         // Petición al servidor
