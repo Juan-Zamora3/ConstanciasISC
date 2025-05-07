@@ -242,12 +242,12 @@ const handleGenerarConstancias = async () => {
       pdfDoc.registerFontkit(fontkit);
   
       const [regResp, boldResp] = await Promise.all([
-        fetch('/fonts/Patria_Regular.otf'),
-        fetch('/fonts/Patria_Regular.otf'),
+        fetch('/fonts/calibri.ttf'),
+        fetch('/fonts/calibri.ttf'),
       ]);
   
       if (!regResp.ok || !boldResp.ok)
-        throw new Error('No se encontró /fonts/Patria_Regular.otf');
+        throw new Error('No se encontró /fonts/calibri.ttf');
   
       const [regBytes, boldBytes] = await Promise.all([
         regResp.arrayBuffer(),
@@ -262,7 +262,7 @@ const handleGenerarConstancias = async () => {
       const SIZE_NAME = 28;
       const SIZE_TEXT = 14;
       const LINE_HEIGHT = 20;
-      const MARGIN_H = 50;
+      const MARGIN_H = 90;
       const COLOR_NAME = rgb(73 / 255, 73 / 255, 73 / 255);
       const COLOR_TEXT = rgb(0.2, 0.2, 0.2);
   
@@ -271,7 +271,7 @@ const handleGenerarConstancias = async () => {
       const nameW = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
       const nameY = height / 2 + 50;
       page.drawText(nameTXT, {
-        x: (width - nameW) / 2,
+        x: (width - nameW) / 2.185,
         y: nameY,
         font: fontBold,
         size: SIZE_NAME,
@@ -299,7 +299,7 @@ const handleGenerarConstancias = async () => {
       for (const l of lineas) {
         const w = fontReg.widthOfTextAtSize(l, SIZE_TEXT);
         page.drawText(l, {
-          x: (width - w) / 2,
+          x: (width - w) / 2.185,
           y: cursorY,
           font: fontReg,
           size: SIZE_TEXT,
@@ -311,10 +311,10 @@ const handleGenerarConstancias = async () => {
       // Mostrar equipo SOLO para tipo 'equipos'
       if (tipoConstancia === 'equipos' && teamName.trim()) {
 
-        const eqTXT = `EQUIPO: ${teamName.toUpperCase()}`;
+        const eqTXT = ` ${teamName.toUpperCase()}`;
         const eqW = fontReg.widthOfTextAtSize(eqTXT, SIZE_TEXT);
         page.drawText(eqTXT, {
-          x: (width - eqW) / 2,
+          x: (width - eqW) / 2.185,
           y: cursorY - LINE_HEIGHT,
           font: fontReg,
           size: SIZE_TEXT,
@@ -627,6 +627,30 @@ const handleMensajeBlur = async () => {
   }
 };
 
+const applyFormat = (type) => {
+  const textarea = document.querySelector('textarea');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = mensajePersonalizado.slice(start, end);
+
+  let formatted = selectedText;
+  if (type === 'bold') formatted = `**${selectedText}**`;
+  if (type === 'underline') formatted = `__${selectedText}__`;
+
+  const updated =
+    mensajePersonalizado.slice(0, start) +
+    formatted +
+    mensajePersonalizado.slice(end);
+
+  setMensajePersonalizado(updated);
+
+  // Mantener selección
+  setTimeout(() => {
+    textarea.focus();
+    textarea.setSelectionRange(start, start + formatted.length);
+  }, 0);
+};
+
 
 
 
@@ -735,6 +759,11 @@ const handleMensajeBlur = async () => {
         
   <Section>
     <Label>Mensaje personalizado</Label>
+    <EditorToolbar>
+  <EditorButton onClick={() => applyFormat('bold')}><b>B</b></EditorButton>
+  <EditorButton onClick={() => applyFormat('underline')}><u>U</u></EditorButton>
+</EditorToolbar>
+
     <textarea
       value={mensajePersonalizado}
       onChange={e => setMensajePersonalizado(e.target.value)}
@@ -829,6 +858,28 @@ const handleMensajeBlur = async () => {
 // ------------------------------------------------------------------
 // Estilos con styled-components (sin cambios relevantes)
 // ------------------------------------------------------------------
+
+const EditorToolbar = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+`;
+
+const EditorButton = styled.button`
+  padding: 4px 10px;
+  font-size: 16px;
+  font-weight: bold;
+  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
+  background-color: ${({ theme }) => theme.bg || '#f9f9f9'};
+  cursor: pointer;
+  border-radius: 4px;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.primary};
+    color: white;
+  }
+`;
+
 const Container = styled.div`
   display: flex;
   height: 100vh;

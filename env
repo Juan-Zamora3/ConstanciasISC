@@ -1,0 +1,11 @@
+# Puerto del servidor
+PORT=3000
+
+# MailerSend SMTP Relay
+MS_SMTP_HOST=smtp.mailersend.net
+MS_SMTP_PORT=587
+MS_SMTP_USER=MS_LIJuA7@test-86org8ee1dkgew13.mlsender.en
+MS_SMTP_PASS=mssp.NsbRObt.pr9084z6rk8lw63d.d0SArEV
+
+# Remitente verificado
+MAIL_FROM="Constancias ISC" <constanciasisc2025@gmail.com>
