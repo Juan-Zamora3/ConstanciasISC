@@ -505,7 +505,7 @@ const handleGenerarConstancias = async () => {
             where('eventoId', '==', selectedEvent)
           );
           const snap = await getDocs(q);
-          data = await Promise.all(
+          const equiposRaw = await Promise.all(
             snap.docs.map(async d => {
               const team = { id: d.id, ...d.data() };
               const qI = query(
@@ -517,6 +517,22 @@ const handleGenerarConstancias = async () => {
               return team;
             })
           );
+        
+          // Agrupar por nombre de equipo
+          const grouped = {};
+          for (const team of equiposRaw) {
+            if (!grouped[team.nombre]) {
+              grouped[team.nombre] = {
+                id: team.nombre, // usamos el nombre como id único
+                nombre: team.nombre,
+                integrantes: [...team.integrantes],
+              };
+            } else {
+              grouped[team.nombre].integrantes.push(...team.integrantes);
+            }
+          }
+        
+          data = Object.values(grouped);
         }
   
         // 2) Coordinadores (agrupados por c.tipo)
