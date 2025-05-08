@@ -242,12 +242,12 @@ const handleGenerarConstancias = async () => {
       pdfDoc.registerFontkit(fontkit);
   
       const [regResp, boldResp] = await Promise.all([
-        fetch('/fonts/calibri.ttf'),
-        fetch('/fonts/calibri.ttf'),
+        fetch('/fonts/NotoSans-Regular.ttf'),
+        fetch('/fonts/calibri-bold.ttf'),
       ]);
   
       if (!regResp.ok || !boldResp.ok)
-        throw new Error('No se encontró /fonts/calibri.ttf');
+        throw new Error('No se encontraron las fuentes');
   
       const [regBytes, boldBytes] = await Promise.all([
         regResp.arrayBuffer(),
@@ -259,33 +259,51 @@ const handleGenerarConstancias = async () => {
   
       const page = pdfDoc.getPages()[0];
       const { width, height } = page.getSize();
-      const SIZE_NAME = 28;
-      const SIZE_TEXT = 14;
-      const LINE_HEIGHT = 20;
-      const MARGIN_H = 90;
+  
+      // Configuración de estilos
+      const SIZE_NAME = 32;
+      const SIZE_TEXT = 14.5;
+      const LINE_HEIGHT = 18.5; // Reducido para ajustar mejor
+      const MARGIN_H = 65;
       const COLOR_NAME = rgb(73 / 255, 73 / 255, 73 / 255);
       const COLOR_TEXT = rgb(0.2, 0.2, 0.2);
   
-      // Nombre del participante
+      // ---------------------------------
+      // 1. Dibuja el nombre centrado y subrayado
+      // ----------------------------------
       const nameTXT = nombre.toUpperCase();
       const nameW = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
-      const nameY = height / 2 + 50;
+      const nameY = height / 2 + 30;
+      const nameX = (width - nameW) / 2.3;
+  
       page.drawText(nameTXT, {
-        x: (width - nameW) / 2.185,
+        x: nameX,
         y: nameY,
         font: fontBold,
         size: SIZE_NAME,
         color: COLOR_NAME,
       });
   
-      // Mensaje personalizado (word-wrapping)
+      // Subrayado
+      page.drawLine({
+        start: { x: nameX, y: nameY - 4 },
+        end: { x: nameX + nameW, y: nameY - 4 },
+        thickness: 1,
+        color: COLOR_NAME,
+      });
+  
+      // ----------------------------------
+      // 2. Word-wrapping del mensaje
+      // ----------------------------------
       const text = mensajePersonalizado.trim();
       const maxW = width - 2 * MARGIN_H;
-      const palabras = text.split(/\s+/);
+  
+      const palabras = text.replace(/\s+/g, ' ').trim().split(' ');
       const lineas = [];
       let linea = '';
+  
       for (const palabra of palabras) {
-        const prueba = linea ? `${linea} ${palabra}` : palabra;
+        const prueba = linea.length > 0 ? `${linea} ${palabra}` : palabra;
         if (fontReg.widthOfTextAtSize(prueba, SIZE_TEXT) <= maxW) {
           linea = prueba;
         } else {
@@ -295,32 +313,86 @@ const handleGenerarConstancias = async () => {
       }
       if (linea) lineas.push(linea);
   
-      let cursorY = nameY - SIZE_NAME - 5;
+      let cursorY = nameY - SIZE_NAME - 6;
+      function parseStyledText(text) {
+        const regex = /(\*\*__.*?__\*\*|__\*\*.*?\*\*__|\*\*.*?\*\*|__.*?__|\S+)/g;
+        const tokens = [];
+      
+        for (const match of text.matchAll(regex)) {
+          let part = match[0];
+          let bold = false;
+          let underline = false;
+      
+          if (/^\*\*__.*__\*\*$/.test(part) || /^__\*\*.*\*\*__$/.test(part)) {
+            bold = true;
+            underline = true;
+            part = part.replace(/^(\*\*__|__\*\*)/, '').replace(/(__\*\*|\*\*__)$/, '');
+          } else if (/^\*\*.*\*\*$/.test(part)) {
+            bold = true;
+            part = part.replace(/^\*\*/, '').replace(/\*\*$/, '');
+          } else if (/^__.*__$/.test(part)) {
+            underline = true;
+            part = part.replace(/^__/, '').replace(/__$/, '');
+          }
+      
+          tokens.push({ text: part, bold, underline });
+        }
+      
+        return tokens;
+      }
+      
       for (const l of lineas) {
-        const w = fontReg.widthOfTextAtSize(l, SIZE_TEXT);
-        page.drawText(l, {
-          x: (width - w) / 2.185,
-          y: cursorY,
-          font: fontReg,
-          size: SIZE_TEXT,
-          color: COLOR_TEXT,
-        });
+        // Expresión regular para detectar partes con estilo
+        const partes = l.match(/(__\*\*.+?\*\*__|\*\*.+?\*\*|__.+?__|[^_\*]+)/g) || [];
+      
+        // Medir ancho total considerando fuentes mezcladas
+        let totalWidth = 0;
+        for (const parte of partes) {
+          let texto = parte.replace(/[*_]/g, '');
+          let font = fontReg;
+          if (/^\*\*(.+)\*\*$/.test(parte)) font = fontBold;
+          if (/^__\*\*(.+)\*\*__$/.test(parte)) font = fontBold;
+          totalWidth += font.widthOfTextAtSize(texto, SIZE_TEXT);
+        }
+      
+        let x = (width - totalWidth) / 2.3;
+        for (const parte of partes) {
+          const texto = parte.replace(/[*_]/g, '');
+          const isBold = /\*\*/.test(parte);
+          const isUnderline = /__/.test(parte);
+          const font = isBold ? fontBold : fontReg;
+          const textWidth = font.widthOfTextAtSize(texto, SIZE_TEXT);
+      
+          page.drawText(texto, {
+            x,
+            y: cursorY,
+            font,
+            size: SIZE_TEXT,
+            color: isUnderline ? rgb(0, 0, 0) : COLOR_TEXT,
+          });
+      
+          if (isUnderline) {
+            page.drawLine({
+              start: { x, y: cursorY - 1 },
+              end: { x: x + textWidth, y: cursorY - 1 },
+              thickness: 1,
+              size:1.8,
+              color: isUnderline ? rgb(0, 0, 0) : COLOR_TEXT, 
+            });
+          }
+      
+          x += textWidth;
+        }
+      
         cursorY -= LINE_HEIGHT;
       }
+      
+      
   
-      // Mostrar equipo SOLO para tipo 'equipos'
-      if (tipoConstancia === 'equipos' && teamName.trim()) {
-
-        const eqTXT = ` ${teamName.toUpperCase()}`;
-        const eqW = fontReg.widthOfTextAtSize(eqTXT, SIZE_TEXT);
-        page.drawText(eqTXT, {
-          x: (width - eqW) / 2.185,
-          y: cursorY - LINE_HEIGHT,
-          font: fontReg,
-          size: SIZE_TEXT,
-          color: COLOR_TEXT,
-        });
-      }
+      // ----------------------------------
+      // 3. Nombre del equipo (solo si aplica)
+      // ----------------------------------
+      
   
       return await pdfDoc.save();
     } catch (err) {
@@ -328,6 +400,7 @@ const handleGenerarConstancias = async () => {
       throw new Error(`Error al generar PDF para ${nombre}: ${err.message}`);
     }
   };
+  
   
   
   
@@ -760,7 +833,7 @@ const applyFormat = (type) => {
   <Section>
     <Label>Mensaje personalizado</Label>
     <EditorToolbar>
-  <EditorButton onClick={() => applyFormat('bold')}><b>B</b></EditorButton>
+
   <EditorButton onClick={() => applyFormat('underline')}><u>U</u></EditorButton>
 </EditorToolbar>
 
