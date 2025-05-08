@@ -36,6 +36,10 @@ export function CoordinadoresSection({ eventoId }) {
     });
     setAddOpen(true);
   };
+  const del = async id => {
+    if (!confirm('Eliminar Coordinador?')) return;
+    await deleteDoc(doc(db, 'coordinadores', id));
+  };
 
   const saveNew = async () => {
     const { nombre, coordinacion, correo } = newCoord;

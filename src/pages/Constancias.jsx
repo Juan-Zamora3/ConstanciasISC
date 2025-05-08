@@ -163,13 +163,13 @@ const generatePreviewsForSelectedTeams = async () => {
   // + si “enviar por correo” está marcado, enviar correos también
   // ------------------------------------------------------------------
  // 2) Generar ZIP y descarga
-const handleGenerarConstancias = async () => {
+ const handleGenerarConstancias = async () => {
   if (!plantillaPDF) {
     alert('Por favor sube una plantilla PDF primero');
     return;
   }
 
-  // 2.1) Construir lista de participantes según tipo
+  // 1) Armar lista de participantes según el tipo
   let allParticipants = [];
   if (tipoConstancia === 'coordinadores') {
     if (!selectedCoordId) {
@@ -177,7 +177,9 @@ const handleGenerarConstancias = async () => {
       return;
     }
     const equipo = teams.find(t => t.id === selectedCoordId);
-    equipo.integrantes.forEach(i => allParticipants.push({ teamName: equipo.nombre, ...i }));
+    equipo.integrantes.forEach(i =>
+      allParticipants.push({ teamName: equipo.nombre, ...i })
+    );
   } else {
     teams
       .filter(t => checkedTeams[t.id])
@@ -197,29 +199,64 @@ const handleGenerarConstancias = async () => {
     const zip = new JSZip();
     const previewBlobs = [];
 
+    // 2) Generar PDFs y agregarlos al ZIP
     for (const p of allParticipants) {
-      const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado,tipoConstancia);
-      const name = `Constancia_${p.teamName.replace(/\s/g, '_')}_${(p.nombre||'').replace(/\s/g, '_')}.pdf`;
-      zip.file(name, pdfBytes);
+      const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado, tipoConstancia);
 
+      // 2.a) Nombre de fichero
+      const safeTeam = p.teamName.replace(/\s+/g, '_');
+      const safeName = p.nombre.replace(/\s+/g, '_');
+      const filename = `Constancia_${safeTeam}_${safeName}.pdf`;
+
+      // 2.b) Agregar al ZIP
+      zip.file(filename, pdfBytes);
+
+      // 2.c) Preparar previsualización
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       previewBlobs.push(URL.createObjectURL(blob));
     }
 
-    // mostrar previsualizaciones
-    setPdfPreviews(previewBlobs);
-    setCurrentPreviewIndex(0);
+    // 3) Mostrar previsualizaciones (si quieres)
+    if (previewBlobs.length) {
+      setPdfPreviews(previewBlobs);
+      setCurrentPreviewIndex(0);
+    }
 
-    // descargar ZIP
+    // 4) Generar y descargar ZIP
     const content = await zip.generateAsync({ type: 'blob' });
     saveAs(content, 'constancias.zip');
 
-    if (sendByEmail) await handleEnviarCorreos();
+    // 5) (Opcional) Enviar por correo
+    if (sendByEmail) {
+      for (const p of allParticipants) {
+        if (!p.correo) continue;
+        // Convierte de nuevo el PDF a base64
+        const pdfBytes = await generarPDFpara(p, plantillaPDF, mensajePersonalizado, tipoConstancia);
+        const base64Pdf = arrayBufferToBase64(pdfBytes);
+
+        const resp = await fetch('http://localhost:3000/enviarConstancia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            correo: p.correo,
+            nombre: p.nombre,
+            equipo: p.teamName,
+            pdf: base64Pdf,
+          }),
+        });
+
+        if (!resp.ok) {
+          console.error(`Error enviando correo a ${p.correo}:`, await resp.text());
+        }
+      }
+    }
   } catch (err) {
-    console.error('Error generando constancias:', err);
-    alert('Ocurrió un error durante la generación de constancias');
+    console.error('🛑 Error generando constancias:', err);
+    alert('Ocurrió un error durante la generación de constancias. Revisa la consola para más detalles.');
   }
 };
+
+
 
 
   // ------------------------------------------------------------------
