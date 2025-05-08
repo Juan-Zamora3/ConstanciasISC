@@ -10,20 +10,11 @@ export function CoordinadoresSection({ eventoId }) {
   const [coordinadores, setCoordinadores] = useState([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const tipos = [
-    'Coordinador General',
-    'coordinador vinculación',
-    'coordinador de reconocimientos',
-    'jurado',
-    'coordinador edecanes',
-    'edecanes',
-    'logística',
-    'logística',
-    'moderadores',
-    'maestro de ceremonia',
-    'jurado'
-  ];
-  const [newCoord, setNewCoord] = useState({ nombre: '', correo: '', tipo: tipos[0] });
+  const [newCoord, setNewCoord] = useState({ 
+    nombre: '', 
+    coordinacion: '', 
+    correo: '' 
+  });
   const [selCoord, setSelCoord] = useState(null);
 
   useEffect(() => {
@@ -38,20 +29,34 @@ export function CoordinadoresSection({ eventoId }) {
   }, [eventoId]);
 
   const openAdd = () => {
-    setNewCoord({ nombre: '', correo: '', tipo: tipos[0] });
+    setNewCoord({ 
+      nombre: '', 
+      coordinacion: '', 
+      correo: '' 
+    });
     setAddOpen(true);
   };
 
   const saveNew = async () => {
-    const { nombre, correo, tipo } = newCoord;
-    if (!nombre.trim() || !correo.trim() || !tipo) return alert('Completa todos los campos');
-    await addDoc(collection(db, 'coordinadores'), { eventoId, nombre, correo, tipo });
+    const { nombre, coordinacion, correo } = newCoord;
+    if (!nombre.trim() || !correo.trim() || !coordinacion.trim())
+      return alert('Completa todos los campos');
+    await addDoc(collection(db, 'coordinadores'), {
+      eventoId,
+      nombre,
+      coordinacion,
+      correo
+    });
     setAddOpen(false);
   };
 
   const openEdit = coord => {
     setSelCoord(coord);
-    setNewCoord({ nombre: coord.nombre, correo: coord.correo, tipo: coord.tipo });
+    setNewCoord({
+      nombre: coord.nombre,
+      coordinacion: coord.coordinacion,
+      correo: coord.correo
+    });
     setEditOpen(true);
   };
 
@@ -60,10 +65,7 @@ export function CoordinadoresSection({ eventoId }) {
     setEditOpen(false);
   };
 
-  const del = async id => {
-    if (!confirm('Eliminar coordinador?')) return;
-    await deleteDoc(doc(db, 'coordinadores', id));
-  };
+  // ... existing code ...
 
   return (
     <>
@@ -78,7 +80,7 @@ export function CoordinadoresSection({ eventoId }) {
             <CardContent onClick={() => openEdit(c)}>
               <h4>{c.nombre}</h4>
               <p>{c.correo}</p>
-              <small>{c.tipo}</small>
+              <small>{c.coordinacion}</small>
             </CardContent>
           </Card>
         ))}
@@ -100,21 +102,20 @@ export function CoordinadoresSection({ eventoId }) {
               />
             </FormGroup>
             <FormGroup>
+              <label>Coordinación</label>
+              <Input
+                value={newCoord.coordinacion}
+                onChange={e => setNewCoord({ ...newCoord, coordinacion: e.target.value })}
+                placeholder="Ingrese el tipo de coordinación"
+              />
+            </FormGroup>
+            <FormGroup>
               <label>Correo</label>
               <Input
                 type="email"
                 value={newCoord.correo}
                 onChange={e => setNewCoord({ ...newCoord, correo: e.target.value })}
               />
-            </FormGroup>
-            <FormGroup>
-              <label>Tipo</label>
-              <Select
-                value={newCoord.tipo}
-                onChange={e => setNewCoord({ ...newCoord, tipo: e.target.value })}
-              >
-                {tipos.map(t => <option key={t} value={t}>{t}</option>)}
-              </Select>
             </FormGroup>
             <Actions>
               <Secondary onClick={() => setAddOpen(false)}>Cancelar</Secondary>
@@ -140,21 +141,20 @@ export function CoordinadoresSection({ eventoId }) {
               />
             </FormGroup>
             <FormGroup>
+              <label>Coordinación</label>
+              <Input
+                value={newCoord.coordinacion}
+                onChange={e => setNewCoord({ ...newCoord, coordinacion: e.target.value })}
+                placeholder="Ingrese el tipo de coordinación"
+              />
+            </FormGroup>
+            <FormGroup>
               <label>Correo</label>
               <Input
                 type="email"
                 value={newCoord.correo}
                 onChange={e => setNewCoord({ ...newCoord, correo: e.target.value })}
               />
-            </FormGroup>
-            <FormGroup>
-              <label>Tipo</label>
-              <Select
-                value={newCoord.tipo}
-                onChange={e => setNewCoord({ ...newCoord, tipo: e.target.value })}
-              >
-                {tipos.map(t => <option key={t} value={t}>{t}</option>)}
-              </Select>
             </FormGroup>
             <Actions>
               <Secondary onClick={() => setEditOpen(false)}>Cancelar</Secondary>
@@ -166,6 +166,8 @@ export function CoordinadoresSection({ eventoId }) {
     </>
   );
 }
+
+// ... existing code ...}
 
 // Styled components (idénticos en estilo a MaestrosSection)
 const ButtonRow = styled.div`display:flex;gap:10px;margin-bottom:1rem;`;

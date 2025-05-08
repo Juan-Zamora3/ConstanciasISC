@@ -12,14 +12,9 @@ export function MaestrosSection({ eventoId }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [newMaestro, setNewMaestro] = useState({
-    nombre: '', correo: '', academias: []
+    nombre: '', correo: ''
   });
   const [selMaestro, setSelMaestro] = useState(null);
-
-  const academiasOpts = [
-    'Sistemas', 'Ing. Civil', 'Ing. Industrial',
-    'Inglés', 'Lic. Admin', 'Otros'
-  ];
 
   // Carga en tiempo real
   useEffect(() => {
@@ -34,40 +29,38 @@ export function MaestrosSection({ eventoId }) {
 
   // Handlers
   const openAdd = () => {
-    setNewMaestro({ nombre: '', correo: '', academias: [] });
+    setNewMaestro({ nombre: '', correo: '' });
     setAddOpen(true);
   };
+  
   const saveNew = async () => {
-    const { nombre, correo, academias } = newMaestro;
-    if (!nombre.trim() || !correo.trim() || academias.length === 0)
+    const { nombre, correo } = newMaestro;
+    if (!nombre.trim() || !correo.trim())
       return alert('Completa todos los campos');
     await addDoc(collection(db, 'maestros'), {
-      eventoId, nombre, correo, academias
+      eventoId, nombre, correo
     });
     setAddOpen(false);
   };
+
   const openEdit = m => {
     setSelMaestro(m);
     setNewMaestro({
       nombre: m.nombre,
-      correo: m.correo,
-      academias: m.academias || []
+      correo: m.correo
     });
     setEditOpen(true);
   };
+
   const saveEdit = async () => {
     const { id } = selMaestro;
     await updateDoc(doc(db, 'maestros', id), { ...newMaestro });
     setEditOpen(false);
   };
+
   const del = async id => {
     if (!confirm('Eliminar maestro?')) return;
     await deleteDoc(doc(db, 'maestros', id));
-  };
-
-  const handleAcademiasChange = e => {
-    const opts = Array.from(e.target.selectedOptions, o => o.value);
-    setNewMaestro({ ...newMaestro, academias: opts });
   };
 
   return (
@@ -83,7 +76,6 @@ export function MaestrosSection({ eventoId }) {
             <CardContent onClick={() => openEdit(m)}>
               <h4>{m.nombre}</h4>
               <p>{m.correo}</p>
-              <small>{(m.academias || []).join(', ')}</small>
             </CardContent>
           </Card>
         ))}
@@ -110,18 +102,6 @@ export function MaestrosSection({ eventoId }) {
                 value={newMaestro.correo}
                 onChange={e => setNewMaestro({ ...newMaestro, correo: e.target.value })}
               />
-            </FormGroup>
-            <FormGroup>
-              <label>Academias</label>
-              <Select
-                multiple
-                value={newMaestro.academias}
-                onChange={handleAcademiasChange}
-              >
-                {academiasOpts.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </Select>
             </FormGroup>
             <Actions>
               <Secondary onClick={() => setAddOpen(false)}>Cancelar</Secondary>
@@ -152,18 +132,6 @@ export function MaestrosSection({ eventoId }) {
                 value={newMaestro.correo}
                 onChange={e => setNewMaestro({ ...newMaestro, correo: e.target.value })}
               />
-            </FormGroup>
-            <FormGroup>
-              <label>Academias</label>
-              <Select
-                multiple
-                value={newMaestro.academias}
-                onChange={handleAcademiasChange}
-              >
-                {academiasOpts.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </Select>
             </FormGroup>
             <Actions>
               <Secondary onClick={() => setEditOpen(false)}>Cancelar</Secondary>

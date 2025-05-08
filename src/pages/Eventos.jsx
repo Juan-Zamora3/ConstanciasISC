@@ -23,14 +23,16 @@ export function Eventos() {
   // Estados principales
   const [eventos, setEventos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [modalOpen, setModalOpen] = useState(false); // Agregamos este estado
 
   // Nuevo evento (creación)
-  const [modalOpen, setModalOpen] = useState(false);
   const [eventoData, setEventoData] = useState({
     nombre: '',
     descripcion: '',
     archivo: null,
-    datos: [], 
+    equipos: [],
+    coordinadores: [],
+    maestros: []
   });
 
   // Edición de evento
@@ -104,51 +106,143 @@ export function Eventos() {
     },
     onDrop: (files) => handleFileUpload(files[0]),
   });
+  
+  const [previewSection, setPreviewSection] = useState('equipos');
 
   const handleFileUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      // Objeto para almacenar los datos de cada hoja
+      const hojas = {
+        equipos: [],
+        coordinadores: [],
+        maestros: []
+      };
 
-      // Validar cabeceras
-      const headers = jsonData[0]?.map((h) => String(h).toLowerCase()) || [];
-      const requiredHeaders = [
-        'nombre del equipo',
-        'alumnos',
-        'num. control',
-        'carrera',
-        'semestre',
-        'correo'
-      ];
+      // Procesar cada hoja
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        // Detectar el tipo de hoja basado en las cabeceras
+        const headers = jsonData[0]?.map(h => String(h).toLowerCase()) || [];
+        
+        if (headers.includes('nombre del equipo')) {
+          hojas.equipos = jsonData.slice(1).map(row => ({
+            equipo: row[0] || '',
+            alumnos: row[1] || '',
+            numControl: row[2] || '',
+            carrera: row[3] || '',
+            semestre: row[4] || '',
+            correo: row[5] || ''
+          }));
+        } else if (headers.includes('coordinacion')) {
+          hojas.coordinadores = jsonData.slice(1).map(row => ({
+            nombre: row[0] || '',
+            coordinacion: row[1] || '',
+            correo: row[2] || ''
+          }));
+        } else if (headers.includes('nombre')) {
+          hojas.maestros = jsonData.slice(1).map(row => ({
+            nombre: row[0] || '',
+            correo: row[1] || ''
+          }));
+        }
+      });
 
-      const hasAllHeaders = requiredHeaders.every((h) =>
-        headers.includes(h.toLowerCase())
-      );
-      if (!hasAllHeaders) {
-        alert('El archivo no tiene las columnas requeridas.');
-        return;
-      }
-
-      // Procesar filas (saltando la 1ra de cabeceras)
-      const datos = jsonData.slice(1).map((row) => ({
-        equipo: row[0] || '',
-        alumnos: row[1] || '',
-        numControl: row[2] || '',
-        carrera: row[3] || '',
-        semestre: row[4] || '',
-        correo: row[5] || ''
-      }));
-
-      setEventoData((prev) => ({
+      setEventoData(prev => ({
         ...prev,
         archivo: file,
-        datos
+        ...hojas
       }));
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const renderPreviewTable = () => {
+    switch(previewSection) {
+      case 'equipos':
+        return (
+          <>
+            <h3>Vista previa de Equipos</h3>
+            <Tabla>
+              <thead>
+                <tr>
+                  <th>Equipo</th>
+                  <th>Alumnos</th>
+                  <th>No. Control</th>
+                  <th>Carrera</th>
+                  <th>Semestre</th>
+                  <th>Correo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eventoData.equipos.map((dato, index) => (
+                  <tr key={index}>
+                    <td>{dato.equipo}</td>
+                    <td>{dato.alumnos}</td>
+                    <td>{dato.numControl}</td>
+                    <td>{dato.carrera}</td>
+                    <td>{dato.semestre}</td>
+                    <td>{dato.correo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </>
+        );
+      
+      case 'coordinadores':
+        return (
+          <>
+            <h3>Vista previa de Coordinadores</h3>
+            <Tabla>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Coordinación</th>
+                  <th>Correo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eventoData.coordinadores.map((dato, index) => (
+                  <tr key={index}>
+                    <td>{dato.nombre}</td>
+                    <td>{dato.coordinacion}</td>
+                    <td>{dato.correo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </>
+        );
+
+      case 'maestros':
+        return (
+          <>
+            <h3>Vista previa de Maestros</h3>
+            <Tabla>
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eventoData.maestros.map((dato, index) => (
+                  <tr key={index}>
+                    <td>{dato.nombre}</td>
+                    <td>{dato.correo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </>
+        );
+    }
   };
 
   // ----------------------------------------------------------------------
@@ -166,7 +260,6 @@ const handleGuardar = async () => {
   }
 
   try {
-    // Si la descripción está vacía, asignar el texto "Agregando evento en blanco"
     const descripcion = eventoData.descripcion.trim() || 'Agregando evento en blanco';
 
     // 1. Crear el documento en la colección "eventos"
@@ -176,38 +269,52 @@ const handleGuardar = async () => {
       fecha: new Date().toLocaleDateString('es-MX'),
     });
 
-    // 2. Procesar los integrantes importados desde el archivo Excel
-    const teamsMap = {};
-    for (const row of eventoData.datos) {
-      const eqName = row.equipo.trim() || 'SIN_EQUIPO';
-      if (!teamsMap[eqName]) {
-        teamsMap[eqName] = [];
-      }
-      teamsMap[eqName].push(row);
-    }
-
-    for (const equipoName of Object.keys(teamsMap)) {
+    // 2. Procesar equipos e integrantes
+    for (const equipo of eventoData.equipos) {
       const equipoRef = await addDoc(collection(db, 'equipos'), {
         eventoId: newEventRef.id,
-        nombre: equipoName,
+        nombre: equipo.equipo,
       });
 
-      for (const participante of teamsMap[equipoName]) {
-        await addDoc(collection(db, 'integrantes'), {
-          eventoId: newEventRef.id,
-          equipoId: equipoRef.id,
-          nombre: participante.alumnos,
-          numControl: participante.numControl,
-          carrera: participante.carrera,
-          semestre: participante.semestre,
-          correo: participante.correo,
-        });
-      }
+      await addDoc(collection(db, 'integrantes'), {
+        eventoId: newEventRef.id,
+        equipoId: equipoRef.id,
+        nombre: equipo.alumnos,
+        numControl: equipo.numControl,
+        carrera: equipo.carrera,
+        semestre: equipo.semestre,
+        correo: equipo.correo,
+      });
     }
 
-    // Limpiar formulario y estado
+    // 3. Procesar coordinadores
+    for (const coord of eventoData.coordinadores) {
+      await addDoc(collection(db, 'coordinadores'), {
+        eventoId: newEventRef.id,
+        nombre: coord.nombre,
+        coordinacion: coord.coordinacion,
+        correo: coord.correo
+      });
+    }
+
+    // 4. Procesar maestros
+    for (const maestro of eventoData.maestros) {
+      await addDoc(collection(db, 'maestros'), {
+        eventoId: newEventRef.id,
+        nombre: maestro.nombre,
+        correo: maestro.correo
+      });
+    }
+
     setModalOpen(false);
-    setEventoData({ nombre: '', descripcion: '', archivo: null, datos: [] });
+    setEventoData({
+      nombre: '',
+      descripcion: '',
+      archivo: null,
+      equipos: [],
+      coordinadores: [],
+      maestros: []
+    });
 
     alert('¡Evento creado con éxito!');
   } catch (error) {
@@ -215,6 +322,7 @@ const handleGuardar = async () => {
     alert('Error al guardar el evento: ' + error.message);
   }
 };
+
 
 
 
@@ -333,45 +441,43 @@ const handleGuardar = async () => {
                 placeholder="Ej: Competencia de programación para alumnos de distintas carreras"
               />
             </FormGroup>
-            {/* Agregar Integrante Manualmente */}
-
 
             <FormGroup>
-              <label>Importar participantes desde Excel</label>
+              <label>Importar datos desde Excel</label>
               <Dropzone {...getRootProps()}>
                 <input {...getInputProps()} />
                 <p>Arrastra tu archivo aquí o haz clic para seleccionar</p>
-                {eventoData.archivo && <p>{eventoData.archivo.name}</p>}
+                {eventoData.archivo && <p>Archivo cargado: {eventoData.archivo.name}</p>}
               </Dropzone>
             </FormGroup>
 
-            {eventoData.datos.length > 0 && (
-              <TablaContainer>
-                <Tabla>
-                  <thead>
-                    <tr>
-                      <th>Equipo</th>
-                      <th>Alumnos</th>
-                      <th>No. Control</th>
-                      <th>Carrera</th>
-                      <th>Semestre</th>
-                      <th>Correo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {eventoData.datos.map((dato, index) => (
-                      <tr key={index}>
-                        <td>{dato.equipo}</td>
-                        <td>{dato.alumnos}</td>
-                        <td>{dato.numControl}</td>
-                        <td>{dato.carrera}</td>
-                        <td>{dato.semestre}</td>
-                        <td>{dato.correo}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Tabla>
-              </TablaContainer>
+            {eventoData.archivo && (
+              <>
+                <PreviewButtons>
+                  <PreviewButton 
+                    active={previewSection === 'equipos'}
+                    onClick={() => setPreviewSection('equipos')}
+                  >
+                    Equipos ({eventoData.equipos.length})
+                  </PreviewButton>
+                  <PreviewButton 
+                    active={previewSection === 'coordinadores'}
+                    onClick={() => setPreviewSection('coordinadores')}
+                  >
+                    Coordinadores ({eventoData.coordinadores.length})
+                  </PreviewButton>
+                  <PreviewButton 
+                    active={previewSection === 'maestros'}
+                    onClick={() => setPreviewSection('maestros')}
+                  >
+                    Maestros ({eventoData.maestros.length})
+                  </PreviewButton>
+                </PreviewButtons>
+
+                <TablaContainer>
+                  {renderPreviewTable()}
+                </TablaContainer>
+              </>
             )}
 
             <ModalActions>
@@ -636,24 +742,26 @@ const Dropzone = styled.div`
 `;
 
 const TablaContainer = styled.div`
+  margin: 15px 0;
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid ${({ theme }) => theme.border || '#ccc'};
-  border-radius: 8px;
+  border-radius: 6px;
 `;
 
 const Tabla = styled.table`
   width: 100%;
   border-collapse: collapse;
+  
   th, td {
-    padding: 12px;
+    padding: 8px;
     text-align: left;
     border-bottom: 1px solid ${({ theme }) => theme.border || '#ccc'};
-    font-size: ${({ theme }) => theme.fontsm || '0.875rem'};
   }
+
   th {
-    background-color: ${({ theme }) => theme.bg4 || '#ccc'};
-    color: ${({ theme }) => theme.textsecondary || '#fff'};
+    background: ${({ theme }) => theme.bg2 || '#f0f0f0'};
+    font-weight: bold;
   }
 `;
 
@@ -709,3 +817,24 @@ const DeleteButton = styled.button`
     opacity: 0.8;
   }
 `;
+
+const PreviewButtons = styled.div`
+  display: flex;
+  gap: 10px;
+  margin: 15px 0;
+`;
+
+const PreviewButton = styled.button`
+  padding: 8px 16px;
+  border: 1px solid ${({ theme }) => theme.border || '#ccc'};
+  border-radius: 6px;
+  background: ${({ $active, theme }) => $active ? theme.primary || '#347ba7' : 'transparent'};
+  color: ${({ $active }) => $active ? '#fff' : 'inherit'};
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: ${({ $active, theme }) => $active ? theme.primary || '#347ba7' : theme.bg2 || '#f0f0f0'};
+  }
+`;
+
