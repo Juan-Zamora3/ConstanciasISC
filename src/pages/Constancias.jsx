@@ -264,7 +264,7 @@ const handleGenerarConstancias = async () => {
       const SIZE_NAME = 24;
       const SIZE_TEXT = 13.5;
       const LINE_HEIGHT = 18.5; // Reducido para ajustar mejor
-      const MARGIN_H = 60;
+      const MARGIN_H = 50;
       const COLOR_NAME = rgb(73 / 255, 73 / 255, 73 / 255);
       const COLOR_TEXT = rgb(0.2, 0.2, 0.2);
   
@@ -274,7 +274,7 @@ const handleGenerarConstancias = async () => {
       const nameTXT = nombre.toUpperCase();
       const nameW = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
       const nameY = height / 2 + 50;
-      const nameX = (width - nameW) / 3;
+      const nameX = ((width - nameW) / 2)-20;
   
       page.drawText(nameTXT, {
         x: nameX,
@@ -330,7 +330,7 @@ const handleGenerarConstancias = async () => {
           totalWidth += font.widthOfTextAtSize(texto, SIZE_TEXT);
         }
       
-        let x = (width - totalWidth) / 3;
+        let x = ((width - totalWidth) / 2) - 20; 
         for (const parte of partes) {
           const texto = parte.replace(/[*_]/g, '');
           const isBold = /\*\*/.test(parte);
