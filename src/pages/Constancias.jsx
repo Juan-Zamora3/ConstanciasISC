@@ -261,10 +261,10 @@ const handleGenerarConstancias = async () => {
       const { width, height } = page.getSize();
   
       // Configuración de estilos
-      const SIZE_NAME = 32;
-      const SIZE_TEXT = 14.5;
+      const SIZE_NAME = 24;
+      const SIZE_TEXT = 13.5;
       const LINE_HEIGHT = 18.5; // Reducido para ajustar mejor
-      const MARGIN_H = 65;
+      const MARGIN_H = 60;
       const COLOR_NAME = rgb(73 / 255, 73 / 255, 73 / 255);
       const COLOR_TEXT = rgb(0.2, 0.2, 0.2);
   
@@ -273,8 +273,8 @@ const handleGenerarConstancias = async () => {
       // ----------------------------------
       const nameTXT = nombre.toUpperCase();
       const nameW = fontBold.widthOfTextAtSize(nameTXT, SIZE_NAME);
-      const nameY = height / 2 + 30;
-      const nameX = (width - nameW) / 2.3;
+      const nameY = height / 2 + 50;
+      const nameX = (width - nameW) / 3;
   
       page.drawText(nameTXT, {
         x: nameX,
@@ -314,32 +314,7 @@ const handleGenerarConstancias = async () => {
       if (linea) lineas.push(linea);
   
       let cursorY = nameY - SIZE_NAME - 6;
-      function parseStyledText(text) {
-        const regex = /(\*\*__.*?__\*\*|__\*\*.*?\*\*__|\*\*.*?\*\*|__.*?__|\S+)/g;
-        const tokens = [];
       
-        for (const match of text.matchAll(regex)) {
-          let part = match[0];
-          let bold = false;
-          let underline = false;
-      
-          if (/^\*\*__.*__\*\*$/.test(part) || /^__\*\*.*\*\*__$/.test(part)) {
-            bold = true;
-            underline = true;
-            part = part.replace(/^(\*\*__|__\*\*)/, '').replace(/(__\*\*|\*\*__)$/, '');
-          } else if (/^\*\*.*\*\*$/.test(part)) {
-            bold = true;
-            part = part.replace(/^\*\*/, '').replace(/\*\*$/, '');
-          } else if (/^__.*__$/.test(part)) {
-            underline = true;
-            part = part.replace(/^__/, '').replace(/__$/, '');
-          }
-      
-          tokens.push({ text: part, bold, underline });
-        }
-      
-        return tokens;
-      }
       
       for (const l of lineas) {
         // Expresión regular para detectar partes con estilo
@@ -355,7 +330,7 @@ const handleGenerarConstancias = async () => {
           totalWidth += font.widthOfTextAtSize(texto, SIZE_TEXT);
         }
       
-        let x = (width - totalWidth) / 2.3;
+        let x = (width - totalWidth) / 3;
         for (const parte of partes) {
           const texto = parte.replace(/[*_]/g, '');
           const isBold = /\*\*/.test(parte);
@@ -554,14 +529,14 @@ const handleGenerarConstancias = async () => {
           const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           // Agrupar por campo `tipo`
           const grouped = docs.reduce((acc, c) => {
-            acc[c.tipo] = acc[c.tipo] || [];
-            acc[c.tipo].push(c);
+            acc[c.coordinacion] = acc[c.coordinacion] || [];
+            acc[c.coordinacion].push(c);
             return acc;
           }, {});
           // Construir array para la UI
-          data = Object.entries(grouped).map(([tipo, integrantes]) => ({
-            id: tipo,       // usamos el tipo como id
-            nombre: tipo,   // mostramos la categoría
+          data = Object.entries(grouped).map(([coordinacion, integrantes]) => ({
+            id: coordinacion,       // usamos el tipo como id
+            nombre: coordinacion,   // mostramos la categoría
             integrantes     // array de coordinadores de esa categoría
           }));
         }
